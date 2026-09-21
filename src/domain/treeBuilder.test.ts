@@ -4,6 +4,7 @@ import {
   buildForest,
   collectBranchIds,
   collectDownlineIds,
+  findOpenSlots,
   getUpline,
   indexById,
   traceSaleHierarchy,
@@ -91,5 +92,22 @@ describe('hierarchy tracing', () => {
   it('collects every downline id of a node', () => {
     const root = buildForest(sample).roots[0]!
     expect(collectDownlineIds(root).sort()).toEqual(['A', 'B', 'C', 'D'])
+  })
+})
+
+describe('findOpenSlots', () => {
+  it('lists parents that still have a free side, and which sides', () => {
+    // A has both children; B has only LEFT; C and D have none.
+    const slots = findOpenSlots(sample)
+    expect(slots.map((s) => [s.parent.id, s.free])).toEqual([
+      ['B', ['RIGHT']],
+      ['C', ['LEFT', 'RIGHT']],
+      ['D', ['LEFT', 'RIGHT']],
+    ])
+  })
+
+  it('offers a lone root both sides, and nothing when the list is empty', () => {
+    expect(findOpenSlots([dist('A')]).map((s) => s.free)).toEqual([['LEFT', 'RIGHT']])
+    expect(findOpenSlots([])).toEqual([])
   })
 })

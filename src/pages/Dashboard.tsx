@@ -16,8 +16,9 @@ import { formatCurrency } from '@/utils/currencyFormatter'
 const { sale: rates, referralPercentage } = defaultCommissionConfig
 
 export default function Dashboard() {
-  const { data, metrics, summaries, now, selectedState, isScoped, isLoading, error, refetch } =
+  const { all, data, metrics, summaries, now, selectedState, isScoped, isLoading, error, refetch } =
     useMarketplaceData()
+  const isEmptyDatabase = !!all && all.distributors.length === 0
 
   const daily = useMemo(
     () => (data ? salesByDay(data.sales, { now, config: defaultCommissionConfig }) : []),
@@ -57,6 +58,30 @@ export default function Dashboard() {
         title="Dashboard"
         description={isScoped ? `Showing ${selectedState} only` : 'Network-wide overview'}
       />
+
+      {isEmptyDatabase && (
+        <Card className="mb-4 border-brand p-5">
+          <h2 className="font-semibold">Welcome. There's no data yet.</h2>
+          <p className="mt-1 text-sm text-ink-2">
+            Everything here is entered one record at a time and stored in PostgreSQL. Start with the
+            first distributor, then onboard retailers under them and record their sales.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              to="/distributors"
+              className="rounded-lg bg-brand-solid px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+            >
+              Add your first distributor
+            </Link>
+            <Link
+              to="/retailers"
+              className="rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium hover:bg-hover"
+            >
+              Retailers
+            </Link>
+          </div>
+        </Card>
+      )}
 
       <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <DashboardCard

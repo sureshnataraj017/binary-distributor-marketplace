@@ -1,28 +1,44 @@
-import { resolve } from 'node:path'
 import { buildApp } from './app'
+import { ensureDatabase, loadEnv } from './db'
 import { createStore } from './store'
+
+loadEnv()
 
 const port = Number(process.env.PORT ?? 3001)
 const latencyMs = Number(process.env.SIMULATE_LATENCY_MS ?? 0)
-// Override with DB_PATH; RESET_DB=1 rebuilds the demo data on start.
-const dbPath = process.env.DB_PATH ?? resolve(import.meta.dirname, 'data', 'marketplace.db')
+const database = process.env.PGDATABASE ?? 'marketplace'
 
-const store = createStore({ path: dbPath, reset: process.env.RESET_DB === '1' })
-const app = buildApp({ store, logger: true, latencyMs })
+async function main() {
+  try {
+    await ensureDatabase(database)
+  } catch (error) {
+    const { PGHOST = 'localhost', PGPORT = '5432', PGUSER = 'postgres' } = process.env
+    console.error(
+      `\nCannot reach PostgreSQL at ${PGHOST}:${PGPORT} as "${PGUSER}".\n` +
+        `Is the PostgreSQL service running, and are PGHOST / PGPORT / PGUSER / PGPASSWORD correct in .env?\n` +
+        `(${(error as Error).message})\n`,
+    )
+    process.exit(1)
+  }
 
-// Close the HTTP server and flush the database on Ctrl+C / container stop.
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    void app.close().finally(() => {
-      store.close()
-      process.exit(0)
+  const store = await createStore({ database })
+  const app = buildApp({ store, logger: true, latencyMs })
+
+  // Stop accepting requests, then release the database connections, on Ctrl+C / container stop.
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+      void app
+        .close()
+        .then(() => store.close())
+        .finally(() => process.exit(0))
     })
-  })
+  }
+
+  app.log.info(`Database: ${database}`)
+  await app.listen({ port, host: '0.0.0.0' })
 }
 
-app.log.info(`Database: ${dbPath}`)
-app.listen({ port, host: '0.0.0.0' }).catch((error) => {
-  app.log.error(error)
-  store.close()
+main().catch((error) => {
+  console.error(error)
   process.exit(1)
 })

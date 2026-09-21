@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { BinaryTree } from '@/components/features/BinaryTree'
 import { NodeDetailsPanel } from '@/components/features/NodeDetailsPanel'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -116,8 +117,24 @@ export default function Network() {
         {tree.error && <ErrorState error={tree.error} onRetry={tree.refetch} />}
         {isEmpty && (
           <EmptyState
-            title="No distributors here yet"
-            description={`There are no distributors in ${selectedState}. Pick another state to see its network.`}
+            title={
+              tree.allDistributors.length === 0
+                ? 'The network is empty'
+                : 'No distributors here yet'
+            }
+            description={
+              tree.allDistributors.length === 0
+                ? 'Add your first distributor and the tree will start to grow.'
+                : `There are no distributors in ${selectedState}. Pick another state to see its network.`
+            }
+            action={
+              <Link
+                to="/distributors"
+                className="rounded-lg bg-brand-solid px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+              >
+                Add a distributor
+              </Link>
+            }
           />
         )}
 

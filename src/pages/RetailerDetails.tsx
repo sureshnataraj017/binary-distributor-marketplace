@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { RecordSaleForm } from '@/components/features/RecordSaleForm'
+import { RetailerStatusControl } from '@/components/features/RetailerStatusControl'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ErrorState } from '@/components/common/ErrorState'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -91,6 +92,11 @@ export default function RetailerDetails() {
         }
       />
 
+      {retailer && retailer.status !== 'CANCELLED' && (
+        <div className="mb-4">
+          <RetailerStatusControl retailer={retailer} />
+        </div>
+      )}
       {retailer && !canSell && (
         <p className="mb-4 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
           Sales can't be recorded for a {retailer.status.toLowerCase()} retailer.

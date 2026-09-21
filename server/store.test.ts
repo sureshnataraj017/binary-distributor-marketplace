@@ -1,21 +1,49 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
-import { createStore } from './store'
-import type { Sale } from '@/types'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { TEST_DATABASE, createTestStore, type TestStore } from './testing'
+import { loadFixtures } from './fixtures'
+import { migrate } from './db'
+import { generateSeed } from './seed'
+import {
+  createStore,
+  type NewDistributor,
+  type NewRetailer,
+  type NewSale,
+  type Store,
+} from './store'
 
-const NOW = new Date('2026-09-21T08:30:00.000Z') // 14:00 IST
-const NEXT_DAY = new Date('2026-09-22T08:30:00.000Z')
+const NOW = new Date()
+const iso = (offsetMs = 0) => new Date(NOW.getTime() + offsetMs).toISOString()
 
-const workDir = mkdtempSync(join(tmpdir(), 'marketplace-'))
-afterAll(() => rmSync(workDir, { recursive: true, force: true }))
-
-const newSale = (retailerId: string, distributorId: string): Omit<Sale, 'id'> => ({
+const distributor = (overrides: Partial<NewDistributor> = {}): NewDistributor => ({
+  name: 'Asha',
+  state: 'Tamil Nadu',
+  city: 'Chennai',
+  parentId: null,
+  position: null,
+  referredBy: null,
+  dailyTarget: 2,
+  joinedAt: iso(-30 * 86_400_000),
+  ...overrides,
+})
+const retailer = (distributorId: string, overrides: Partial<NewRetailer> = {}): NewRetailer => ({
+  name: 'Sri Traders',
+  distributorId,
+  state: 'Tamil Nadu',
+  city: 'Chennai',
+  phone: null,
+  onboardedAt: iso(-86_400_000),
+  status: 'ACTIVE',
+  ...overrides,
+})
+const sale = (
+  retailerId: string,
+  distributorId: string,
+  overrides: Partial<NewSale> = {},
+): NewSale => ({
   retailerId,
   distributorId,
-  date: NOW.toISOString(),
+  date: iso(-1000),
   product: 'Product A',
   quantity: 1,
   amount: 10_000,
@@ -23,140 +51,272 @@ const newSale = (retailerId: string, distributorId: string): Omit<Sale, 'id'> =>
   distributorCommission: 1_000,
   companyCommission: 200,
   remainder: 5_800,
+  ...overrides,
 })
 
-describe('seeding and reads', () => {
-  const store = createStore({ path: ':memory:', now: NOW })
+describe('an empty database', () => {
+  let ctx: TestStore
+  beforeAll(async () => void (ctx = await createTestStore()))
+  afterAll(() => ctx.dispose())
 
-  it('loads the seeded network', () => {
-    expect(store.distributors.list()).toHaveLength(32)
-    expect(store.retailers.list().length).toBeGreaterThan(100)
-    expect(store.sales.list().length).toBeGreaterThan(500)
-    expect(store.referrals.list().length).toBeGreaterThan(0)
+  it('starts with no data at all: nothing is generated for you', async () => {
+    const { store } = ctx
+    expect(await store.distributors.list()).toEqual([])
+    expect(await store.retailers.list()).toEqual([])
+    expect(await store.sales.list()).toEqual([])
+    expect(await store.referrals.list()).toEqual([])
+    expect(await store.ledger()).toEqual([])
   })
 
-  it("rebuilds each distributor's retailerIds from the retailers table", () => {
-    const d = store.distributors.get('DIST-001')!
-    const owned = store.retailers.listByDistributor('DIST-001').map((r) => r.id)
-    expect(d.retailerIds).toEqual(owned)
-    expect(d.retailerIds.length).toBeGreaterThan(0)
+  it('returns undefined for unknown ids instead of throwing', async () => {
+    expect(await ctx.store.distributors.get('DIST-999')).toBeUndefined()
+    expect(await ctx.store.retailers.get('RET-0')).toBeUndefined()
+    expect(await ctx.store.referrals.get('REF-0000')).toBeUndefined()
   })
 
-  it('returns undefined for unknown ids instead of throwing', () => {
-    expect(store.distributors.get('DIST-999')).toBeUndefined()
-    expect(store.retailers.get('RET-0')).toBeUndefined()
-  })
-
-  it('orders sales by invoice number and referrals newest first', () => {
-    const invoices = store.sales.list().map((s) => Number(s.id.replace('INV-', '')))
-    expect(invoices).toEqual([...invoices].sort((a, b) => a - b))
-    const dates = store.referrals.list().map((r) => r.date)
-    expect(dates).toEqual([...dates].sort().reverse())
-  })
-
-  it('derives a ledger that includes every sale', () => {
-    const ledger = store.ledger(NOW)
-    const saleIds = new Set(
-      ledger.filter((e) => e.type === 'RETAILER_SALE').map((e) => e.reference),
-    )
-    expect(saleIds.size).toBe(store.sales.list().length)
+  it('is at the latest schema, and re-running migrations changes nothing', async () => {
+    expect(await migrate(ctx.store.pool)).toEqual([])
+    const { rows } = await ctx.store.pool.query('SELECT name FROM schema_migrations')
+    expect(rows.map((r) => r.name)).toEqual(['001_init.sql'])
   })
 })
 
-describe('database-enforced integrity', () => {
-  const store = createStore({ path: ':memory:', now: NOW })
-  const retailer = store.retailers.list().find((r) => r.status === 'ACTIVE')!
-
-  it('assigns sequential invoice numbers', () => {
-    const last = Number(store.sales.list().at(-1)!.id.replace('INV-', ''))
-    const a = store.sales.create(newSale(retailer.id, retailer.distributorId))
-    const b = store.sales.create(newSale(retailer.id, retailer.distributorId))
-    expect(a.id).toBe(`INV-${last + 1}`)
-    expect(b.id).toBe(`INV-${last + 2}`)
+describe('storing records one by one', () => {
+  let ctx: TestStore
+  let store: Store
+  beforeAll(async () => {
+    ctx = await createTestStore()
+    store = ctx.store
   })
+  afterAll(() => ctx.dispose())
 
-  it('rejects a sale for a retailer that does not exist (foreign key)', () => {
-    expect(() => store.sales.create(newSale('RET-0', retailer.distributorId))).toThrow(
-      /FOREIGN KEY/,
+  it('assigns sequential, readable ids to each record as it is created', async () => {
+    const a = await store.distributors.create(distributor({ name: 'Asha' }))
+    const b = await store.distributors.create(
+      distributor({ name: 'Bala', parentId: a.id, position: 'LEFT', referredBy: a.id }),
     )
+    expect([a.id, b.id]).toEqual(['DIST-001', 'DIST-002'])
+
+    const r1 = await store.retailers.create(retailer(a.id, { name: 'One' }))
+    const r2 = await store.retailers.create(retailer(a.id, { name: 'Two' }))
+    expect([r1.id, r2.id]).toEqual(['RET-1001', 'RET-1002'])
+
+    const s1 = await store.sales.create(sale(r1.id, a.id))
+    const s2 = await store.sales.create(sale(r1.id, a.id))
+    expect([s1.id, s2.id]).toEqual(['INV-1001', 'INV-1002'])
+
+    const ref = await store.referrals.create({
+      referringDistributorId: a.id,
+      referredDistributorId: b.id,
+      date: iso(-1000),
+      fee: 50_000,
+      percentage: 10,
+      commission: 5_000,
+      paymentStatus: 'PENDING',
+    })
+    expect(ref.id).toBe('REF-0001')
   })
 
-  it('rejects a sale whose shares do not add up to the amount', () => {
-    expect(() =>
-      store.sales.create({ ...newSale(retailer.id, retailer.distributorId), remainder: 5_799 }),
-    ).toThrow(/CHECK/)
+  it("reads back exactly what was stored, including the distributor's retailer ids", async () => {
+    const a = (await store.distributors.get('DIST-001'))!
+    expect(a).toMatchObject({
+      name: 'Asha',
+      state: 'Tamil Nadu',
+      parentId: null,
+      position: null,
+      dailyTarget: 2,
+    })
+    expect(a.retailerIds).toEqual(['RET-1001', 'RET-1002'])
+    expect((await store.distributors.get('DIST-002'))!.retailerIds).toEqual([])
+
+    const s = (await store.sales.listByRetailer('RET-1001'))[0]!
+    expect(s).toMatchObject({ amount: 10_000, retailerCommission: 3_000, remainder: 5_800 })
+    expect(typeof s.amount).toBe('number') // BIGINT comes back as a number, not a string
+    expect(new Date(s.date).toISOString()).toBe(s.date) // TIMESTAMPTZ comes back as an ISO string
   })
 
-  it('rejects a non-positive amount or quantity', () => {
-    const base = newSale(retailer.id, retailer.distributorId)
-    expect(() => store.sales.create({ ...base, quantity: 0 })).toThrow(/CHECK/)
-    expect(() =>
-      store.sales.create({
-        ...base,
-        amount: 0,
-        retailerCommission: 0,
-        distributorCommission: 0,
-        companyCommission: 0,
-        remainder: 0,
+  it('updates a retailer status and marks a referral paid', async () => {
+    expect((await store.retailers.setStatus('RET-1002', 'DEACTIVATED'))!.status).toBe('DEACTIVATED')
+    expect((await store.referrals.markPaid('REF-0001'))!.paymentStatus).toBe('PAID')
+    expect(await store.retailers.setStatus('RET-0', 'CANCELLED')).toBeUndefined()
+    expect(await store.referrals.markPaid('REF-9999')).toBeUndefined()
+  })
+
+  it('derives the ledger from what was stored', async () => {
+    const ledger = await store.ledger()
+    const types = new Set(ledger.map((e) => e.type))
+    expect(types).toEqual(
+      new Set(['ONBOARDING', 'RETAILER_SALE', 'DOWNLINE_SALE', 'DISTRIBUTOR_REFERRAL']),
+    )
+    // RET-1002 was deactivated, so only RET-1001 earns an onboarding bonus.
+    expect(ledger.filter((e) => e.type === 'ONBOARDING').map((e) => e.reference)).toEqual([
+      'RET-1001',
+    ])
+  })
+
+  it('gives 25 simultaneous sales 25 distinct invoice numbers', async () => {
+    const created = await Promise.all(
+      Array.from({ length: 25 }, () => store.sales.create(sale('RET-1001', 'DIST-001'))),
+    )
+    expect(new Set(created.map((s) => s.id)).size).toBe(25)
+  })
+})
+
+describe('rules enforced by PostgreSQL itself', () => {
+  let ctx: TestStore
+  let store: Store
+  beforeAll(async () => {
+    ctx = await createTestStore()
+    store = ctx.store
+    await store.distributors.create(distributor())
+    await store.retailers.create(retailer('DIST-001'))
+  })
+  afterAll(() => ctx.dispose())
+
+  it('refuses a second child in an occupied LEFT/RIGHT slot (binary-tree rule)', async () => {
+    await store.distributors.create(distributor({ parentId: 'DIST-001', position: 'LEFT' }))
+    await expect(
+      store.distributors.create(
+        distributor({ name: 'Rival', parentId: 'DIST-001', position: 'LEFT' }),
+      ),
+    ).rejects.toMatchObject({ code: '23505', constraint: 'distributors_parent_id_position_key' })
+    // The other side is still free.
+    await expect(
+      store.distributors.create(
+        distributor({ name: 'Ok', parentId: 'DIST-001', position: 'RIGHT' }),
+      ),
+    ).resolves.toMatchObject({ position: 'RIGHT' })
+  })
+
+  it('ties placement to a side: a parent needs LEFT/RIGHT, a top-level one must have none', async () => {
+    await expect(
+      store.distributors.create(distributor({ parentId: 'DIST-001', position: null })),
+    ).rejects.toMatchObject({ code: '23514' })
+    await expect(
+      store.distributors.create(distributor({ parentId: null, position: 'LEFT' })),
+    ).rejects.toMatchObject({ code: '23514' })
+  })
+
+  it('refuses a parent or referrer that does not exist (foreign key)', async () => {
+    await expect(
+      store.distributors.create(distributor({ parentId: 'DIST-999', position: 'LEFT' })),
+    ).rejects.toMatchObject({ code: '23503' })
+    await expect(
+      store.distributors.create(distributor({ referredBy: 'DIST-999' })),
+    ).rejects.toMatchObject({ code: '23503' })
+    await expect(store.retailers.create(retailer('DIST-999'))).rejects.toMatchObject({
+      code: '23503',
+    })
+    await expect(store.sales.create(sale('RET-0', 'DIST-001'))).rejects.toMatchObject({
+      code: '23503',
+    })
+  })
+
+  it("refuses a sale whose shares don't add up to the amount, or a non-positive amount/quantity", async () => {
+    await expect(
+      store.sales.create(sale('RET-1001', 'DIST-001', { remainder: 5_799 })),
+    ).rejects.toMatchObject({ code: '23514' })
+    await expect(
+      store.sales.create(sale('RET-1001', 'DIST-001', { quantity: 0 })),
+    ).rejects.toMatchObject({ code: '23514' })
+    await expect(
+      store.sales.create(
+        sale('RET-1001', 'DIST-001', {
+          amount: 0,
+          retailerCommission: 0,
+          distributorCommission: 0,
+          companyCommission: 0,
+          remainder: 0,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: '23514' })
+  })
+
+  it('refuses an invalid retailer status, a blank name, and a distributor referring themselves', async () => {
+    await expect(
+      store.retailers.create(retailer('DIST-001', { status: 'BOGUS' as never })),
+    ).rejects.toMatchObject({ code: '23514' })
+    await expect(
+      store.retailers.create(retailer('DIST-001', { name: '   ' })),
+    ).rejects.toMatchObject({ code: '23514' })
+    await expect(
+      store.referrals.create({
+        referringDistributorId: 'DIST-001',
+        referredDistributorId: 'DIST-001',
+        date: iso(),
+        fee: 100,
+        percentage: 10,
+        commission: 10,
+        paymentStatus: 'PENDING',
       }),
-    ).toThrow(/CHECK/)
+    ).rejects.toMatchObject({ code: '23514' })
   })
 
-  it('a failed insert leaves nothing behind and does not burn an invoice number', () => {
-    const before = store.sales.list().length
-    expect(() => store.sales.create(newSale('RET-0', retailer.distributorId))).toThrow()
-    expect(store.sales.list()).toHaveLength(before)
-    const next = store.sales.create(newSale(retailer.id, retailer.distributorId))
-    expect(Number(next.id.replace('INV-', ''))).toBe(
-      Number(store.sales.list().at(-2)!.id.replace('INV-', '')) + 1,
-    )
+  it('a rejected write stores nothing', async () => {
+    const before = (await store.sales.list()).length
+    await expect(store.sales.create(sale('RET-0', 'DIST-001'))).rejects.toThrow()
+    expect(await store.sales.list()).toHaveLength(before)
   })
 })
 
 describe('persistence', () => {
-  it('keeps data across restarts on the same business day', () => {
-    const path = join(workDir, 'same-day.db')
-    const first = createStore({ path, now: NOW })
-    const retailer = first.retailers.list().find((r) => r.status === 'ACTIVE')!
-    const created = first.sales.create(newSale(retailer.id, retailer.distributorId))
-    const count = first.sales.list().length
-    first.close()
+  it('keeps every record after the server restarts (a fresh connection to the same database)', async () => {
+    const ctx = await createTestStore()
+    try {
+      const d = await ctx.store.distributors.create(distributor())
+      const r = await ctx.store.retailers.create(retailer(d.id))
+      const s = await ctx.store.sales.create(sale(r.id, d.id))
+      await ctx.store.close() // "the server stops"
 
-    const second = createStore({ path, now: new Date(NOW.getTime() + 3_600_000) })
-    expect(second.sales.list()).toHaveLength(count)
-    expect(second.sales.listByRetailer(retailer.id).some((s) => s.id === created.id)).toBe(true)
-    second.close()
+      const restarted = await createStore({ database: TEST_DATABASE, schema: ctx.schema })
+      try {
+        expect((await restarted.distributors.get(d.id))!.retailerIds).toEqual([r.id])
+        expect((await restarted.sales.list()).map((x) => x.id)).toEqual([s.id])
+        // Numbering continues where it left off rather than starting over.
+        expect((await restarted.sales.create(sale(r.id, d.id))).id).toBe('INV-1002')
+      } finally {
+        await restarted.close()
+      }
+    } finally {
+      // ctx.store is already closed; only drop the schema.
+      const { createPool } = await import('./db')
+      const admin = createPool({ database: TEST_DATABASE })
+      await admin.query(`DROP SCHEMA ${ctx.schema} CASCADE`)
+      await admin.end()
+    }
+  })
+})
+
+describe('demo fixtures (opt-in, used by tests)', () => {
+  let ctx: TestStore
+  beforeAll(async () => {
+    ctx = await createTestStore()
+    await loadFixtures(ctx.store, generateSeed(NOW))
+  })
+  afterAll(() => ctx.dispose())
+
+  it('loads the generated network with explicit ids', async () => {
+    const { store } = ctx
+    expect(await store.distributors.list()).toHaveLength(32)
+    expect((await store.retailers.list()).length).toBeGreaterThan(100)
+    expect((await store.sales.list()).length).toBeGreaterThan(500)
   })
 
-  it('rebuilds the demo data when the business day has changed (it is relative to "today")', () => {
-    const path = join(workDir, 'next-day.db')
-    const first = createStore({ path, now: NOW })
-    const retailer = first.retailers.list().find((r) => r.status === 'ACTIVE')!
-    const created = first.sales.create(newSale(retailer.id, retailer.distributorId))
-    first.close()
-
-    const second = createStore({ path, now: NEXT_DAY })
-    expect(
-      second.sales
-        .list()
-        .some(
-          (s) => s.id === created.id && s.product === 'Product A' && s.date === NOW.toISOString(),
-        ),
-    ).toBe(false)
-    expect(second.distributors.list()).toHaveLength(32)
-    second.close()
+  it('leaves the id numbering ready to continue from the loaded data', async () => {
+    const { store } = ctx
+    const nextDistributor = await store.distributors.create(distributor())
+    expect(nextDistributor.id).toBe('DIST-033')
+    const lastInvoice = (await store.sales.list()).at(-1)!.id
+    const created = await store.sales.create(
+      sale((await store.retailers.list())[0]!.id, 'DIST-001'),
+    )
+    expect(Number(created.id.replace('INV-', ''))).toBe(Number(lastInvoice.replace('INV-', '')) + 1)
   })
 
-  it('reset rebuilds even on the same day', () => {
-    const path = join(workDir, 'reset.db')
-    const first = createStore({ path, now: NOW })
-    const before = first.sales.list().length
-    const retailer = first.retailers.list().find((r) => r.status === 'ACTIVE')!
-    first.sales.create(newSale(retailer.id, retailer.distributorId))
-    first.close()
-
-    const second = createStore({ path, now: NOW, reset: true })
-    expect(second.sales.list()).toHaveLength(before)
-    second.close()
+  it("rebuilds each distributor's retailerIds from the retailers table", async () => {
+    const d = (await ctx.store.distributors.get('DIST-001'))!
+    const owned = (await ctx.store.retailers.listByDistributor('DIST-001')).map((r) => r.id)
+    expect(d.retailerIds).toEqual(owned)
+    expect(d.retailerIds.length).toBeGreaterThan(0)
   })
 })

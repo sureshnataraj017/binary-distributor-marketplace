@@ -8,6 +8,11 @@ const findCard = async (label: string) => {
   return title.closest('div')!.parentElement as HTMLElement
 }
 
+// Data loaded once, up front. The demo network is generated fresh into PostgreSQL for this test file.
+const fixtureDistributors = await store.distributors.list()
+const fixtureSales = await store.sales.list()
+const fixtureRetailers = await store.retailers.list()
+
 describe('routes render with real data', () => {
   it('dashboard shows all nine KPI cards', async () => {
     renderApp('/dashboard')
@@ -28,9 +33,8 @@ describe('routes render with real data', () => {
   })
 
   it('the state filter narrows the dashboard numbers', async () => {
-    const distributors = store.distributors.list()
-    const state = distributors[0]!.state
-    const expected = distributors.filter((d) => d.state === state).length
+    const state = fixtureDistributors[0]!.state
+    const expected = fixtureDistributors.filter((d) => d.state === state).length
     renderApp('/dashboard')
     await within(await findCard('Total distributors')).findByText('32')
 
@@ -67,6 +71,13 @@ describe('routes render with real data', () => {
     await waitFor(() => expect(nodes().length).toBeLessThan(before))
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     await waitFor(() => expect(nodes().length).toBe(before))
+  })
+
+  it('lists distributors and retailers with the entry buttons', async () => {
+    renderApp('/distributors')
+    const table = await screen.findByRole('table', { name: 'Distributors' })
+    await within(table).findByText('DIST-001')
+    expect(screen.getByRole('button', { name: 'Add distributor' })).toBeInTheDocument()
   })
 
   it('distributor details shows the daily target and retailers', async () => {
@@ -108,9 +119,8 @@ describe('routes render with real data', () => {
 })
 
 describe('retailer sales table', () => {
-  const allSales = store.sales.list()
-  const retailerId = allSales[0]!.retailerId
-  const sales = allSales.filter((s) => s.retailerId === retailerId)
+  const retailerId = fixtureSales[0]!.retailerId
+  const sales = fixtureSales.filter((s) => s.retailerId === retailerId)
 
   it('shows every sale with a totals row that adds up', async () => {
     renderApp(`/retailers/${retailerId}/sales`)
@@ -142,13 +152,11 @@ describe('retailer sales table', () => {
 
 describe('record a sale', () => {
   // A different retailer from the sales-table tests above, so their totals are not disturbed.
-  const sellerId = store.sales.list()[0]!.retailerId
-  const retailer = store.retailers
-    .list()
-    .find(
-      (r) =>
-        r.status === 'ACTIVE' && r.id !== sellerId && store.sales.listByRetailer(r.id).length > 0,
-    )!
+  const sellerId = fixtureSales[0]!.retailerId
+  const soldBefore = new Set(fixtureSales.map((s) => s.retailerId))
+  const retailer = fixtureRetailers.find(
+    (r) => r.status === 'ACTIVE' && r.id !== sellerId && soldBefore.has(r.id),
+  )!
 
   const openForm = async (retailerId = retailer.id) => {
     renderApp(`/retailers/${retailerId}`)
@@ -174,7 +182,7 @@ describe('record a sale', () => {
   })
 
   it('records the sale on the server, shows its confirmed split, and refreshes the page', async () => {
-    const before = store.sales.listByRetailer(retailer.id).length
+    const before = (await store.sales.listByRetailer(retailer.id)).length
     await openForm()
     await fill('Product B', '2', '2500')
     await userEvent.click(screen.getByRole('button', { name: 'Record sale' }))
@@ -186,7 +194,7 @@ describe('record a sale', () => {
     expect(status).toHaveTextContent('$50.00') // company 2%
 
     // It really was stored, and the page's own totals caught up (cache invalidation).
-    const stored = store.sales.listByRetailer(retailer.id)
+    const stored = await store.sales.listByRetailer(retailer.id)
     expect(stored).toHaveLength(before + 1)
     const invoice = stored.at(-1)!.id
     expect(await screen.findByText(invoice, { selector: 'span.font-medium' })).toBeInTheDocument()
@@ -200,7 +208,7 @@ describe('record a sale', () => {
     const invoice = (await screen.findByRole('status')).textContent!.match(/INV-\d+/)![0]
 
     // The ledger is derived from the stored sale: distributor 10% and company 2% of $400.
-    const entries = store.ledger().filter((e) => e.reference === invoice)
+    const entries = (await store.ledger()).filter((e) => e.reference === invoice)
     expect(entries.map((e) => [e.type, e.amount]).sort()).toEqual([
       ['DOWNLINE_SALE', 800],
       ['RETAILER_SALE', 4000],
@@ -208,7 +216,7 @@ describe('record a sale', () => {
   })
 
   it('validates in the browser and sends nothing when the form is invalid', async () => {
-    const before = store.sales.list().length
+    const before = (await store.sales.list()).length
     await openForm()
     await userEvent.clear(screen.getByLabelText('Quantity'))
     await userEvent.click(screen.getByRole('button', { name: 'Record sale' }))
@@ -216,16 +224,16 @@ describe('record a sale', () => {
     expect(await screen.findByText('Enter a product name.')).toBeInTheDocument()
     expect(screen.getByText('Enter a whole number, 1 or more.')).toBeInTheDocument()
     expect(screen.getByText(/Enter an amount like/)).toBeInTheDocument()
-    expect(store.sales.list()).toHaveLength(before)
+    expect(await store.sales.list()).toHaveLength(before)
   })
 
   it("shows the server's reason when it refuses the sale, and stores nothing", async () => {
     // Status is ACTIVE so the UI allows it, but the onboarding date is in the future: an invalid record.
     // Only the server's rules can catch this, which is the point of validating there too.
-    const invalid = store.retailers
-      .list()
-      .find((r) => r.status === 'ACTIVE' && Date.parse(r.onboardedAt) > Date.now())!
-    const before = store.sales.list().length
+    const invalid = fixtureRetailers.find(
+      (r) => r.status === 'ACTIVE' && Date.parse(r.onboardedAt) > Date.now(),
+    )!
+    const before = (await store.sales.list()).length
 
     await openForm(invalid.id)
     await fill('Product A', '1', '100')
@@ -235,11 +243,11 @@ describe('record a sale', () => {
       /not eligible for sales \(FUTURE_DATE\)/,
     )
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(store.sales.list()).toHaveLength(before)
+    expect(await store.sales.list()).toHaveLength(before)
   })
 
   it('disables recording for a cancelled retailer and says why', async () => {
-    const cancelled = store.retailers.list().find((r) => r.status === 'CANCELLED')!
+    const cancelled = fixtureRetailers.find((r) => r.status === 'CANCELLED')!
     renderApp(`/retailers/${cancelled.id}`)
     expect(
       await screen.findByText("Sales can't be recorded for a cancelled retailer."),

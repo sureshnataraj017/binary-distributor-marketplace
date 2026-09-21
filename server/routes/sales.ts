@@ -41,16 +41,18 @@ export function saleRoutes(app: FastifyInstance, store: Store) {
     '/api/sales',
     { schema: createSaleSchema },
     async (request, reply) => {
-      const { retailerId, product, quantity, amount } = request.body
+      const { retailerId, quantity, amount } = request.body
+      const product = request.body.product.trim()
+      if (!product) throw new HttpError(400, 'product must not be blank')
       const now = new Date()
 
-      const retailer = store.retailers.get(retailerId)
+      const retailer = await store.retailers.get(retailerId)
       if (!retailer) throw notFound('Retailer', retailerId)
-      const distributor = store.distributors.get(retailer.distributorId)
+      const distributor = await store.distributors.get(retailer.distributorId)
       if (!distributor) throw new HttpError(422, `Retailer ${retailerId} has no valid distributor`)
 
       const assessment = assessOnboardings(
-        store.retailers.listByDistributor(distributor.id),
+        await store.retailers.listByDistributor(distributor.id),
         distributor,
         { now, config },
       ).find((a) => a.retailer.id === retailer.id)
@@ -70,7 +72,7 @@ export function saleRoutes(app: FastifyInstance, store: Store) {
       }
 
       const split = calculateCommission({ saleAmount: amount, ...config.sale })
-      const sale = store.sales.create({
+      const sale = await store.sales.create({
         retailerId: retailer.id,
         distributorId: distributor.id,
         date: date.toISOString(),
@@ -82,7 +84,7 @@ export function saleRoutes(app: FastifyInstance, store: Store) {
         companyCommission: split.company,
         remainder: split.remainder,
       })
-      return reply.status(201).send(sale)
+      return reply.status(201).header('location', `/api/sales/${sale.id}`).send(sale)
     },
   )
 }

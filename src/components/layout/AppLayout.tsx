@@ -4,6 +4,8 @@ import { useThemeStore } from '@/store/themeStore'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: '▦' },
+  { to: '/distributors', label: 'Distributors', icon: '☰', end: true },
+  { to: '/retailers', label: 'Retailers', icon: '⌂', end: true },
   { to: '/distributors/network', label: 'Network', icon: '⑂' },
   { to: '/commissions', label: 'Commissions', icon: '$' },
   { to: '/referrals', label: 'Referrals', icon: '⇄' },
@@ -62,7 +64,7 @@ export function AppLayout() {
           className="flex gap-1 overflow-x-auto px-3 pb-2 md:flex-col md:pb-0"
         >
           {NAV.map((item) => (
-            <NavLink key={item.to} to={item.to} className={navClass}>
+            <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
               <span aria-hidden="true" className="w-4 text-center">
                 {item.icon}
               </span>

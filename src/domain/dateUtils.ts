@@ -35,3 +35,16 @@ export function isWithinDayRange(
 export function isSameBusinessDay(a: Date, b: Date, timeZone: string): boolean {
   return businessDayKey(a, timeZone) === businessDayKey(b, timeZone)
 }
+
+/**
+ * Turn a calendar day picked in a form (yyyy-MM-dd) into an instant, in `timeZone`.
+ * "Today" means right now; any other day means noon that day, so it can never spill into a neighbouring
+ * day when converted between time zones. Returns `null` when the text is not a real date.
+ */
+export function dayToInstant(day: string, now: Date, timeZone: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  if (day === businessDayKey(now, timeZone)) return now
+  const noon = fromZonedTime(`${day}T12:00:00`, timeZone)
+  // Reject impossible dates such as 2026-02-31, which some parsers silently roll over.
+  return Number.isNaN(noon.getTime()) || businessDayKey(noon, timeZone) !== day ? null : noon
+}

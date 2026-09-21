@@ -1,4 +1,5 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent } from 'react'
+import { FormField as Field, controlClass as inputClass } from '@/components/common/FormField'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { defaultCommissionConfig } from '@/config/commissionConfig'
@@ -13,23 +14,6 @@ const { retailerPercentage, distributorPercentage, companyPercentage } =
   defaultCommissionConfig.sale
 const SUGGESTED_PRODUCTS = ['Product A', 'Product B', 'Product C', 'Product D']
 const EMPTY: SaleFormValues = { product: '', quantity: '1', amount: '' }
-
-const inputClass =
-  'w-full rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink placeholder:text-muted aria-[invalid=true]:border-critical'
-
-function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
-      {label}
-      {children}
-      {error && (
-        <span role="alert" className="font-normal text-critical">
-          {error}
-        </span>
-      )}
-    </label>
-  )
-}
 
 function Split({ label, value, note }: { label: string; value: number; note?: string }) {
   return (
@@ -123,7 +107,12 @@ export function RecordSaleForm({ retailer, onClose }: { retailer: Retailer; onCl
         </Button>
       </div>
 
-      <form onSubmit={onSubmit} noValidate className="grid gap-4 md:grid-cols-2">
+      <form
+        aria-label="Record sale"
+        onSubmit={onSubmit}
+        noValidate
+        className="grid gap-4 md:grid-cols-2"
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Field label="Product" error={shownErrors.product}>

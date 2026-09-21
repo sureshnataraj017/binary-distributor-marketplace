@@ -35,7 +35,7 @@ interface Context {
 }
 
 /** Indian mobile numbers: compare the last 10 digits so "+91 98765 43210" equals "9876543210". */
-const normalizePhone = (phone: string) => phone.replace(/\D/g, '').slice(-10)
+export const normalizePhone = (phone: string) => phone.replace(/\D/g, '').slice(-10)
 
 const duplicateKeys = (r: Retailer) => [
   `id:${r.id}`,

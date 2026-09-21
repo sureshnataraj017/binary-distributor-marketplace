@@ -1,4 +1,4 @@
-import type { Distributor } from '@/types'
+import type { Distributor, Position } from '@/types'
 
 export interface TreeNode {
   distributor: Distributor
@@ -160,4 +160,27 @@ export function collectBranchIds(roots: readonly TreeNode[]): string[] {
 
 export function indexById(distributors: readonly Distributor[]): Map<string, Distributor> {
   return new Map(distributors.map((d) => [d.id, d]))
+}
+
+export interface OpenSlots {
+  parent: Distributor
+  /** The sides of `parent` that have no child yet. */
+  free: Position[]
+}
+
+/** Every distributor that still has a free LEFT and/or RIGHT slot, i.e. where a new one can be placed. */
+export function findOpenSlots(distributors: readonly Distributor[]): OpenSlots[] {
+  const taken = new Map<string, Set<Position>>()
+  for (const d of distributors) {
+    if (d.parentId && d.position) {
+      const sides = taken.get(d.parentId) ?? new Set<Position>()
+      sides.add(d.position)
+      taken.set(d.parentId, sides)
+    }
+  }
+  return distributors.flatMap((parent) => {
+    const used = taken.get(parent.id) ?? new Set<Position>()
+    const free = (['LEFT', 'RIGHT'] as const).filter((side) => !used.has(side))
+    return free.length > 0 ? [{ parent, free }] : []
+  })
 }

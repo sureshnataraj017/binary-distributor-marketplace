@@ -18,7 +18,11 @@ const BASE_URL = '/api'
 const simulateErrorRequested = () =>
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('simulateError')
 
-async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: 'GET' | 'POST' | 'PATCH',
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['content-type'] = 'application/json'
   if (simulateErrorRequested()) headers['x-simulate-error'] = '1'
@@ -50,3 +54,4 @@ async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown):
 
 export const apiGet = <T>(path: string) => request<T>('GET', path)
 export const apiPost = <T>(path: string, body: unknown) => request<T>('POST', path, body)
+export const apiPatch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body)

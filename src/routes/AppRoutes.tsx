@@ -5,6 +5,8 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Distributors = lazy(() => import('@/pages/Distributors'))
+const Retailers = lazy(() => import('@/pages/Retailers'))
 const Network = lazy(() => import('@/pages/Network'))
 const DistributorDetails = lazy(() => import('@/pages/DistributorDetails'))
 const RetailerDetails = lazy(() => import('@/pages/RetailerDetails'))
@@ -41,9 +43,10 @@ export function AppRoutes() {
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/distributors" element={<Navigate to="/distributors/network" replace />} />
+            <Route path="/distributors" element={<Distributors />} />
             <Route path="/distributors/network" element={<Network />} />
             <Route path="/distributors/:id" element={<DistributorDetails />} />
+            <Route path="/retailers" element={<Retailers />} />
             <Route path="/retailers/:id" element={<RetailerDetails />} />
             <Route path="/retailers/:id/sales" element={<RetailerSales />} />
             <Route path="/commissions" element={<CommissionLedger />} />

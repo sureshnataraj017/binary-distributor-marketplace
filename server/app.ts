@@ -15,6 +15,34 @@ interface AppOptions {
   allowSimulatedErrors?: boolean
 }
 
+/**
+ * The database is the last line of defence: if a rule slips past the API checks (or two requests race),
+ * PostgreSQL rejects the write. Translate those errors into clear client errors instead of a generic 500.
+ */
+function describeDatabaseError(error: unknown): { status: number; message: string } | null {
+  const { code, constraint } = error as { code?: string; constraint?: string }
+  switch (code) {
+    case '23505': // unique_violation
+      return constraint === 'distributors_parent_id_position_key'
+        ? {
+            status: 409,
+            message: 'That position is already taken. Choose the other side or another parent.',
+          }
+        : { status: 409, message: 'That record already exists.' }
+    case '23503': // foreign_key_violation
+      return { status: 422, message: 'This refers to a record that does not exist.' }
+    case '23514': // check_violation
+    case '23502': // not_null_violation
+      return { status: 422, message: 'The data breaks a database rule and was not saved.' }
+    case '22P02': // invalid_text_representation
+    case '22007': // invalid_datetime_format
+    case '22008': // datetime_field_overflow
+      return { status: 400, message: 'One of the values is not valid.' }
+    default:
+      return null
+  }
+}
+
 export function buildApp({
   store,
   logger = false,
@@ -32,12 +60,16 @@ export function buildApp({
 
   // One error shape for every failure: { status, message }. Internals are never leaked on 5xx.
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
-    const status = error.statusCode ?? 500
-    if (status >= 500 && !(error instanceof HttpError)) request.log.error(error)
+    const known = error instanceof HttpError || error.statusCode !== undefined
+    const fromDatabase = known ? null : describeDatabaseError(error)
+    const status = fromDatabase?.status ?? error.statusCode ?? 500
+    const expected = known || fromDatabase !== null
+    if (!expected) request.log.error(error)
     void reply.status(status).send({
       status,
       message:
-        status >= 500 && !(error instanceof HttpError) ? 'Internal server error' : error.message,
+        fromDatabase?.message ??
+        (status >= 500 && !expected ? 'Internal server error' : error.message),
     })
   })
   app.setNotFoundHandler((request, reply) => {
@@ -46,7 +78,11 @@ export function buildApp({
       .send({ status: 404, message: `Route ${request.method} ${request.url} not found` })
   })
 
-  app.get('/api/health', async () => ({ status: 'ok' }))
+  // Reports healthy only if the database answers, so a monitor notices when PostgreSQL is down.
+  app.get('/api/health', async () => {
+    await store.pool.query('SELECT 1')
+    return { status: 'ok' }
+  })
   distributorRoutes(app, store)
   retailerRoutes(app, store)
   saleRoutes(app, store)
