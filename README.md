@@ -1,36 +1,40 @@
 # Binary Marketplace: Distributor & Retailer Network Dashboard
 
-A React + TypeScript dashboard and a Node (Fastify) REST API, backed by **PostgreSQL**, for managing a binary
+A React + TypeScript dashboard and a Node (Fastify) REST API, backed by **SQLite**, for managing a binary
 distributor network: retailer onboarding, sales, commissions, referrals and the company downline commission.
 
 The application starts with an **empty database**. Every distributor, retailer, sale and referral is entered one
-record at a time through the forms and stored in PostgreSQL.
+record at a time through the forms and stored in a single SQLite file — no database server to install or run.
 
 ## Setup
 
-**Prerequisites:** Node 22+ and a running PostgreSQL 15+ server.
+**Prerequisites:** Node 22+. Nothing else — SQLite is an embedded, file-based database.
 
 ```bash
 npm install
-cp .env.example .env     # then set PGPASSWORD (and PGHOST / PGPORT / PGUSER if not the defaults)
-npm run dev              # API on :3001 + web app on :5173; open http://localhost:5173
+npm run dev   # API on :3001 + web app on :5173; open http://localhost:5173
 ```
 
-On first start the API creates the `marketplace` database if it does not exist and applies the SQL migrations in
-`server/migrations/`. There is nothing else to run. If PostgreSQL is not reachable it exits with a clear message
-naming the host, port and user it tried.
+On first start the API creates `server/data/marketplace.db` (and its folder) if it does not exist and applies the
+migrations in `server/migrations/`. There is nothing else to run.
 
 ```bash
-npm test             # 228 tests; needs the PostgreSQL server running (see Quality)
+npm test             # 228 tests, against a real SQLite file per test (see Quality)
 npm run build        # typecheck (web + server) + production web build
 npm run dev:server   # API only            npm run dev:web   # web app only
 npm run db:seed      # OPTIONAL: load a generated demo network into an empty database
 npm run db:clear     # delete all business data and restart the id numbering
 ```
 
-Vite proxies `/api` to the server, so the browser sees one origin and needs no CORS setup. Environment variables:
-`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` (default `marketplace`), `PORT` (API port, default 3001) and
-`SIMULATE_LATENCY_MS` (adds a delay per request, to see loading skeletons). `.env` is gitignored; never commit it.
+Vite proxies `/api` to the server, so the browser sees one origin and needs no CORS setup. Environment variables
+(all optional, see `.env.example`): `DB_PATH` (default `server/data/marketplace.db`), `PORT` (API port, default
+3001) and `SIMULATE_LATENCY_MS` (adds a delay per request, to see loading skeletons). `.env` is gitignored; never
+commit real secrets.
+
+**Hosting.** Because SQLite is a file, host it somewhere with a persistent writable disk attached to a single
+long-running process — Render, Fly.io, Railway or a small VPS all work well; point `DB_PATH` at a mounted volume.
+Serverless platforms with an ephemeral or read-only filesystem (Vercel/Netlify functions) will not persist writes
+and are not a good fit for this database choice.
 
 Demo aid: append `?simulateError` to any page URL. The client sends an `x-simulate-error` header and the server
 answers 503, so you can see every error state. The server ignores this header when `NODE_ENV=production`.
@@ -86,14 +90,14 @@ src/
   pages/        One file per route (lazy-loaded)
   routes/       AppRoutes
 server/         Node + Fastify REST API
-  app.ts        buildApp(): hooks, error handling, PostgreSQL error mapping, route registration
+  app.ts        buildApp(): hooks, error handling, SQLite error mapping, route registration
   routes/       distributors, retailers, sales, commissions (incl. referrals)
-  store.ts      PostgreSQL persistence behind a Store interface (parameterised SQL, row mapping)
-  db.ts         connection pool, type parsers, database bootstrap, migration runner
+  store.ts      SQLite persistence behind a Store interface (prepared statements, row mapping)
+  db.ts         connection setup (WAL, foreign keys), migration runner
   migrations/   Versioned SQL schema (001_init.sql)
   fixtures.ts   Opt-in bulk loader used by tests and `db:seed`; never runs by itself
   seed.ts       Deterministic demo-data generator (opt-in)
-  testing.ts    Real-PostgreSQL test store in a throwaway schema
+  testing.ts    Real-SQLite test store, one throwaway file per test run
   index.ts      Process entry point
 ```
 
@@ -131,7 +135,8 @@ the _same_ commission engine and rules. In a larger codebase these would move in
 
 Creating a record returns `201` with a `Location` header. Every error has one shape, `{ status, message }`:
 `400` malformed, `404` unknown record, `409` conflict (occupied tree slot, duplicate phone), `422` a business rule
-refused it (future date, ineligible retailer...), `503` database unavailable. Internals are never leaked on a 500.
+refused it (future date, ineligible retailer...), `503` simulated/database unavailable. Internals are never leaked
+on a 500.
 
 **The server owns the money and the identity of every record.** A client never sends commission amounts, ids,
 a referrer or a retailer's initial status: those are calculated, generated or derived on the server, and extra
@@ -151,29 +156,37 @@ of this size). At scale those aggregations would move behind server endpoints wi
 
 ### Database
 
-**PostgreSQL 15+** through `pg` (node-postgres) with parameterised queries. Routes never see SQL; they use the
-`Store` interface in `server/store.ts`. Money is `BIGINT` cents (never floats), instants are `TIMESTAMPTZ` (stored in
-UTC), ids are generated by the database from **sequences** (`DIST-001`, `RET-1001`, `INV-1001`, `REF-0001`), so records
-can be created one at a time, and by several requests at once, without colliding.
+**SQLite** through `better-sqlite3` (synchronous, prepared statements) with parameterised queries. Routes never see
+SQL; they use the `Store` interface in `server/store.ts`. Money is stored as `INTEGER` cents (never floats), instants
+as `TEXT` ISO-8601 strings (UTC). Ids are readable strings (`DIST-001`, `RET-1001`, `INV-1001`, `REF-0001`) claimed
+from a `counters` table inside the same transaction as the insert. Because `better-sqlite3` calls are synchronous —
+no other JavaScript runs between claiming the next id and writing the row — this is safe for concurrent requests in
+this single-process server without needing a database-native sequence.
 
 Integrity is enforced **by the database**, not only by application code, so it also holds when someone bypasses the API:
 
 - `sales`: `CHECK (retailer + distributor + company + remainder = amount)` (a sale can never lose or invent a cent);
-  positive amount and quantity; `retailer_id` / `distributor_id` are foreign keys.
+  positive amount and quantity; `retailer_id` / `distributor_id` are foreign keys (`PRAGMA foreign_keys = ON`, which
+  SQLite requires enabling explicitly — done once when the connection opens).
 - `distributors`: `UNIQUE (parent_id, position)` makes the binary-tree rule ("one LEFT and one RIGHT child") a database
-  invariant, so two simultaneous requests for one slot cannot both win; `CHECK ((parent_id IS NULL) = (position IS NULL))`
+  invariant, so two racing writes for one slot cannot both win; `CHECK ((parent_id IS NULL) = (position IS NULL))`
   ties placement to a side; a distributor cannot be its own parent or referrer.
 - Status, position and payment-status columns are `CHECK`-constrained enums; names cannot be blank.
-- The API checks the same rules first to give friendly messages; PostgreSQL errors that still slip through (`23505`
-  unique, `23503` foreign key, `23514` check) are translated into clear `409` / `422` responses, never a bare `500`.
+- The API checks the same rules first to give friendly messages; SQLite errors that still slip through
+  (`SQLITE_CONSTRAINT_UNIQUE`, `SQLITE_CONSTRAINT_FOREIGNKEY`, `SQLITE_CONSTRAINT_CHECK`) are translated into clear
+  `409` / `422` responses, never a bare `500`.
 
 **Migrations.** `server/migrations/*.sql` are applied in order, each in its own transaction, tracked in a
-`schema_migrations` table, and guarded by an advisory lock so two instances starting together cannot collide. To change
-the schema, add `002_....sql`; never edit an applied migration.
+`schema_migrations` table. To change the schema, add `002_....sql`; never edit an applied migration.
 
 The **ledger is not stored**: it is derived from sales, onboardings and referrals on every request, so it can never
-disagree with them. Invoice numbers come from a sequence, so a failed insert can leave a gap in the numbering; that is
-normal for sequences and numbers are never reused.
+disagree with them. Invoice numbers come from the `sale_invoice` counter, so a failed insert can leave a gap in the
+numbering; that is normal and numbers are never reused.
+
+**Journal mode.** The connection runs in WAL mode (readers do not block the writer) with `busy_timeout` set, which is
+the right SQLite configuration for a single server process serving concurrent HTTP requests. SQLite itself still
+serializes writes to one at a time — fine at this scale, but the reason to move to a client-server database (Postgres,
+MySQL) if this ever needs multiple app server instances sharing one database.
 
 ## Business rules and decisions
 
@@ -234,12 +247,13 @@ The seed is generated relative to "today", so seed it on the day you want to dem
 ## Quality
 
 - Strict TypeScript (`noUncheckedIndexedAccess`), oxlint, Prettier.
-- **228 tests, run against real PostgreSQL** (not an emulation): domain rules; the store and the constraints PostgreSQL
-  itself enforces (occupied slots, foreign keys, sale totals, concurrent writes, persistence across a restart); every API
-  endpoint including validation, conflicts and error mapping; and full-stack UI tests where `fetch` is routed into the
-  real Fastify app, including a walk-through that builds a network from an **empty database** using only the forms.
-- Each test file gets its own throwaway schema in a separate `marketplace_test` database, so files run in parallel and
-  your real data is never touched. Leftovers from an interrupted run are cleaned up at the next start.
+- **228 tests, run against a real SQLite file** (not an emulation): domain rules; the store and the constraints
+  SQLite itself enforces (occupied slots, foreign keys, sale totals, concurrent writes, persistence across a
+  restart); every API endpoint including validation, conflicts and error mapping; and full-stack UI tests where
+  `fetch` is routed into the real Fastify app, including a walk-through that builds a network from an **empty
+  database** using only the forms.
+- Each test gets its own throwaway `.db` file under `server/data/test/`, so test files run independently and your
+  real data is never touched. Leftovers from an interrupted run are cleaned up at the next start.
 - Accessibility: named forms with inline errors, keyboard-operable tree nodes, tooltips on focus, `aria-sort` on tables,
   status colours always paired with an icon and label, skip link, reduced-motion support, light and dark themes.
 - Performance: route-level code splitting, memoized derivations, portal tooltips outside the zoomable canvas.
@@ -251,3 +265,4 @@ The seed is generated relative to "today", so seed it on the day you want to dem
 - Server-side aggregation, pagination and filtering for very large networks; virtualize the tree and tables.
 - Per-distributor and time-boxed commission rates (the engine already takes rates as input).
 - Bulk import (CSV) on top of the same validated create endpoints.
+"# binary-distributor-marketplace" 
