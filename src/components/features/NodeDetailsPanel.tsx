@@ -1,3 +1,4 @@
+import { ChevronRight, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -33,7 +34,7 @@ export function NodeDetailsPanel({ distributor, summary, retailers, byId, onClos
           </p>
         </div>
         <Button variant="ghost" onClick={onClose} aria-label="Close panel" className="!px-2">
-          ✕
+          <X className="size-4" />
         </Button>
       </div>
 
@@ -45,9 +46,7 @@ export function NodeDetailsPanel({ distributor, summary, retailers, byId, onClos
           <li className="text-ink-2">Company</li>
           {path.map((node) => (
             <li key={node.id} className="flex items-center gap-1">
-              <span aria-hidden="true" className="text-muted">
-                ›
-              </span>
+              <ChevronRight aria-hidden="true" className="size-3 text-muted" />
               {node.id === distributor.id ? (
                 <span className="font-semibold">{node.name}</span>
               ) : (
@@ -103,7 +102,7 @@ export function NodeDetailsPanel({ distributor, summary, retailers, byId, onClos
 
       <Link
         to={`/distributors/${distributor.id}`}
-        className="mt-3 block rounded-lg bg-brand-solid px-3 py-2 text-center text-sm font-medium text-white hover:opacity-90"
+        className="mt-3 block rounded-lg bg-linear-to-r from-brand-solid to-brand-2 px-3 py-2 text-center text-sm font-medium text-white shadow-sm hover:shadow-md hover:brightness-105"
       >
         View full details
       </Link>

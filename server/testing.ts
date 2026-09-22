@@ -1,57 +1,44 @@
 import { randomUUID } from 'node:crypto'
-import { loadEnv, ensureDatabase, createPool } from './db'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { loadFixtures } from './fixtures'
 import { generateSeed } from './seed'
 import { createStore, type Store } from './store'
 
-export const TEST_DATABASE = 'marketplace_test'
+const TEST_DIR = resolve(import.meta.dirname, 'data', 'test')
 
-/** Removes schemas left behind by test runs that were killed before they could clean up. */
-export async function dropStaleTestSchemas(): Promise<void> {
-  loadEnv()
-  await ensureDatabase(TEST_DATABASE)
-  const pool = createPool({ database: TEST_DATABASE })
-  try {
-    const { rows } = await pool.query<{ schema_name: string }>(
-      `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 't\\_%'`,
-    )
-    for (const { schema_name } of rows) await pool.query(`DROP SCHEMA "${schema_name}" CASCADE`)
-  } finally {
-    await pool.end()
-  }
+/** Removes test database files left behind by runs that were killed before they could clean up. */
+export function dropStaleTestDatabases(): void {
+  if (!existsSync(TEST_DIR)) return
+  for (const file of readdirSync(TEST_DIR)) rmSync(resolve(TEST_DIR, file), { force: true })
 }
 
 export interface TestStore {
   store: Store
-  /** Name of the isolated schema, so a test can reopen it to simulate a restart. */
-  schema: string
-  /** Drops the isolated schema and closes the connections. Call from afterAll. */
+  /** Path to the isolated database file, so a test can reopen it to simulate a restart. */
+  path: string
+  /** Deletes the isolated database file and closes the connection. Call from afterAll. */
   dispose(): Promise<void>
 }
 
 /**
- * A real PostgreSQL store inside its own throwaway schema, so test files run in parallel without
+ * A real SQLite database inside its own throwaway file, so test files run side by side without
  * seeing each other's data. Tests use the same database engine as production, not an emulation.
  * With `fixtures: true` it is pre-loaded with the generated demo network.
  */
 export async function createTestStore({ fixtures = false } = {}): Promise<TestStore> {
-  loadEnv()
-  await ensureDatabase(TEST_DATABASE)
-  const schema = `t_${randomUUID().replaceAll('-', '').slice(0, 12)}`
+  if (!existsSync(TEST_DIR)) mkdirSync(TEST_DIR, { recursive: true })
+  const path = resolve(TEST_DIR, `${randomUUID()}.db`)
 
-  const admin = createPool({ database: TEST_DATABASE })
-  await admin.query(`CREATE SCHEMA ${schema}`)
-
-  const store = await createStore({ database: TEST_DATABASE, schema })
+  const store = await createStore({ path })
   if (fixtures) await loadFixtures(store, generateSeed(new Date()))
 
   return {
     store,
-    schema,
+    path,
     async dispose() {
       await store.close()
-      await admin.query(`DROP SCHEMA ${schema} CASCADE`)
-      await admin.end()
+      for (const suffix of ['', '-wal', '-shm']) rmSync(`${path}${suffix}`, { force: true })
     },
   }
 }

@@ -10,7 +10,7 @@ import { buildApp } from '../../server/app'
 import { createTestStore } from '../../server/testing'
 
 /**
- * Two real PostgreSQL databases (each in its own throwaway schema):
+ * Two real SQLite databases (each its own throwaway file):
  *  - `store`      pre-loaded with the generated demo network
  *  - `emptyStore` completely empty, like a fresh install
  */
@@ -28,7 +28,7 @@ let active: keyof typeof apps = 'fixtures'
 /**
  * Routes the browser's `fetch('/api/...')` into the REAL Fastify app, in-process (no network port).
  * The UI tests therefore exercise the whole stack: components, hooks, HTTP client, routes, domain logic,
- * and PostgreSQL.
+ * and SQLite.
  */
 globalThis.fetch = async (input, init) => {
   const url =

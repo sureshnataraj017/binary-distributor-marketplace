@@ -38,7 +38,8 @@ describe('routes render with real data', () => {
     renderApp('/dashboard')
     await within(await findCard('Total distributors')).findByText('32')
 
-    await userEvent.selectOptions(screen.getByRole('combobox'), state)
+    await userEvent.click(screen.getByRole('combobox'))
+    await userEvent.click(await screen.findByRole('option', { name: `${state} (${expected})` }))
 
     await within(await findCard('Total distributors')).findByText(String(expected))
     expect(screen.getByText(`Showing ${state} only`)).toBeInTheDocument()
@@ -101,7 +102,8 @@ describe('routes render with real data', () => {
     renderApp('/commissions')
     const table = await screen.findByRole('table', { name: 'Commission ledger' })
     await within(table).findAllByText('RETAILER_SALE')
-    await userEvent.selectOptions(screen.getByLabelText('Type'), 'DOWNLINE_SALE')
+    await userEvent.click(screen.getByLabelText(/^Type/))
+    await userEvent.click(await screen.findByRole('option', { name: 'Downline sale' }))
     await waitFor(() => expect(within(table).queryByText('RETAILER_SALE')).not.toBeInTheDocument())
     expect(within(table).getAllByText('DOWNLINE_SALE').length).toBeGreaterThan(0)
   })

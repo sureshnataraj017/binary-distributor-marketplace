@@ -3,54 +3,56 @@
 /* Design tokens. Every component reads these roles; nothing hard-codes a hex. */
 :root {
   color-scheme: light;
-  --canvas: #f4f4f1;
-  --surface: #fcfcfb;
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
-  --muted: #898781;
-  --line: #e1e0d9;
-  --line-strong: #c3c2b7;
-  --brand: #256abf;
-  --brand-solid: #256abf;
-  --brand-soft: #e8f1fc;
-  --hover: rgba(11, 11, 11, 0.04);
+  --canvas: #f6f6fc;
+  --surface: #ffffff;
+  --ink: #16161f;
+  --ink-2: #5b5b70;
+  --muted: #91909f;
+  --line: #e7e6f2;
+  --line-strong: #d3d1e6;
+  --brand: #4f46e5;
+  --brand-solid: #4f46e5;
+  --brand-2: #7c3aed;
+  --brand-soft: #eef0fd;
+  --hover: rgba(79, 70, 229, 0.06);
 
-  --good: #006300;
-  --warn: #7a5200;
-  --critical: #b02a2a;
-  --good-soft: rgba(12, 163, 12, 0.14);
-  --warn-soft: rgba(250, 178, 25, 0.22);
-  --critical-soft: rgba(208, 59, 59, 0.14);
+  --good: #059669;
+  --warn: #b45309;
+  --critical: #dc2626;
+  --good-soft: rgba(5, 150, 105, 0.12);
+  --warn-soft: rgba(217, 119, 6, 0.16);
+  --critical-soft: rgba(220, 38, 38, 0.12);
 
   /* Categorical series, fixed order (validated palette). */
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
+  --series-1: #4f46e5;
+  --series-2: #7c3aed;
+  --series-3: #0d9488;
+  --series-4: #d97706;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --canvas: #0d0d0d;
-  --surface: #1a1a19;
-  --ink: #ffffff;
-  --ink-2: #c3c2b7;
-  --muted: #898781;
-  --line: #2c2c2a;
-  --line-strong: #383835;
-  --brand: #6da7ec;
-  --brand-solid: #2a78d6;
-  --brand-soft: #16263a;
-  --hover: rgba(255, 255, 255, 0.06);
+  --canvas: #0a0a13;
+  --surface: #15151f;
+  --ink: #f7f7fb;
+  --ink-2: #b9b8c9;
+  --muted: #85849a;
+  --line: #27273a;
+  --line-strong: #35344a;
+  --brand: #a5b4fc;
+  --brand-solid: #6366f1;
+  --brand-2: #a78bfa;
+  --brand-soft: #211f3d;
+  --hover: rgba(165, 180, 252, 0.1);
 
-  --good: #0ca30c;
-  --warn: #fab219;
-  --critical: #ec6a6a;
+  --good: #34d399;
+  --warn: #fbbf24;
+  --critical: #f87171;
 
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
+  --series-1: #818cf8;
+  --series-2: #a78bfa;
+  --series-3: #2dd4bf;
+  --series-4: #fbbf24;
 }
 
 @theme inline {
@@ -64,6 +66,7 @@
   --color-line-strong: var(--line-strong);
   --color-brand: var(--brand);
   --color-brand-solid: var(--brand-solid);
+  --color-brand-2: var(--brand-2);
   --color-brand-soft: var(--brand-soft);
   --color-hover: var(--hover);
   --color-good: var(--good);
@@ -80,11 +83,30 @@
 
 body {
   @apply bg-canvas font-sans text-ink antialiased;
+  background-image: radial-gradient(ellipse 1200px 600px at 50% -10%, var(--brand-soft), transparent);
+  background-repeat: no-repeat;
 }
 
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* react-day-picker theming: reuse the app's tokens instead of the library's defaults. */
+.rdp-root .rdp-day_button:hover:not(:disabled) {
+  background-color: var(--hover);
+}
+.rdp-root .rdp-nav button:hover:not(:disabled) {
+  background-color: var(--hover);
+  border-radius: 0.375rem;
+}
+.rdp-root .rdp-weekday {
+  color: var(--ink-2);
+}
+.rdp-root .rdp-selected .rdp-day_button {
+  background-color: var(--brand-solid);
+  border-color: var(--brand-solid);
+  color: #fff;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/common/DataTable'
@@ -97,6 +98,7 @@ export default function Retailers() {
         }
         actions={
           <Button variant="primary" disabled={formOpen} onClick={() => setFormOpen(true)}>
+            <Plus className="size-4" />
             Onboard retailer
           </Button>
         }

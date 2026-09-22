@@ -1,7 +1,9 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useId, useMemo, useState, type FormEvent } from 'react'
 import { FormField, FormMessage, controlClass } from '@/components/common/FormField'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { DatePicker } from '@/components/ui/DatePicker'
+import { Select } from '@/components/ui/Select'
 import { defaultCommissionConfig } from '@/config/commissionConfig'
 import { businessDayKey } from '@/domain/dateUtils'
 import { parseDollars } from '@/domain/money'
@@ -27,6 +29,7 @@ export function RecordReferralForm({ distributors, onClose }: Props) {
   const [recorded, setRecorded] = useState<Referral | null>(null)
   const create = useCreateReferral()
   const now = useNow()
+  const uid = useId()
 
   const byId = useMemo(() => new Map(distributors.map((d) => [d.id, d])), [distributors])
   // Only a distributor who was referred by someone can generate a referral commission.
@@ -93,6 +96,7 @@ export function RecordReferralForm({ distributors, onClose }: Props) {
         >
           <FormField
             label="Referred distributor"
+            id={`${uid}-referred-distributor`}
             error={shown.referredDistributorId}
             hint={
               referrer
@@ -100,19 +104,19 @@ export function RecordReferralForm({ distributors, onClose }: Props) {
                 : undefined
             }
           >
-            <select
+            <Select
+              inputId={`${uid}-referred-distributor`}
               value={values.referredDistributorId}
-              onChange={(e) => set({ referredDistributorId: e.target.value })}
-              aria-invalid={!!shown.referredDistributorId}
-              className={controlClass}
-            >
-              <option value="">Choose a distributor…</option>
-              {referred.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.id}) · referred by {byId.get(d.referredBy!)?.name ?? d.referredBy}
-                </option>
-              ))}
-            </select>
+              onChange={(referredDistributorId) => set({ referredDistributorId })}
+              invalid={!!shown.referredDistributorId}
+              options={[
+                { value: '', label: 'Choose a distributor…' },
+                ...referred.map((d) => ({
+                  value: d.id,
+                  label: `${d.name} (${d.id}) · referred by ${byId.get(d.referredBy!)?.name ?? d.referredBy}`,
+                })),
+              ]}
+            />
           </FormField>
           <FormField
             label="Fee (USD)"
@@ -132,14 +136,18 @@ export function RecordReferralForm({ distributors, onClose }: Props) {
               className={controlClass}
             />
           </FormField>
-          <FormField label="Date (optional)" error={shown.date} hint="Leave empty for today.">
-            <input
-              type="date"
+          <FormField
+            label="Date (optional)"
+            id={`${uid}-date`}
+            error={shown.date}
+            hint="Leave empty for today."
+          >
+            <DatePicker
+              id={`${uid}-date`}
               max={businessDayKey(now, defaultCommissionConfig.businessTimeZone)}
               value={values.date}
-              onChange={(e) => set({ date: e.target.value })}
-              aria-invalid={!!shown.date}
-              className={controlClass}
+              onChange={(date) => set({ date })}
+              invalid={!!shown.date}
             />
           </FormField>
           <div className="flex items-end">
@@ -154,7 +162,7 @@ export function RecordReferralForm({ distributors, onClose }: Props) {
         {serverError && <FormMessage tone="error">{serverError}</FormMessage>}
         {recorded && (
           <FormMessage tone="success">
-            ✓ Recorded {recorded.id}: {formatCurrency(recorded.commission, { precise: true })}{' '}
+            Recorded {recorded.id}: {formatCurrency(recorded.commission, { precise: true })}{' '}
             commission for {recorded.referringDistributorId}, pending payment.
           </FormMessage>
         )}

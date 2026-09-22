@@ -1,5 +1,5 @@
+import { loadEnv, resolveDbPath } from './db'
 import { clearData, loadFixtures } from './fixtures'
-import { ensureDatabase, loadEnv } from './db'
 import { generateSeed } from './seed'
 import { createStore } from './store'
 
@@ -10,19 +10,18 @@ import { createStore } from './store'
  */
 loadEnv()
 const command = process.argv[2]
-const database = process.env.PGDATABASE ?? 'marketplace'
 
 if (command !== 'seed' && command !== 'clear') {
   console.error('Usage: tsx server/dbTool.ts <seed|clear>')
   process.exit(1)
 }
 
-await ensureDatabase(database)
-const store = await createStore({ database })
+const path = resolveDbPath()
+const store = await createStore({ path })
 try {
   if (command === 'clear') {
     await clearData(store)
-    console.log(`Cleared all data in "${database}".`)
+    console.log(`Cleared all data in "${path}".`)
   } else {
     if ((await store.distributors.list()).length > 0) {
       console.error(
@@ -34,7 +33,7 @@ try {
       await loadFixtures(store, seed)
       console.log(
         `Loaded ${seed.distributors.length} distributors, ${seed.retailers.length} retailers, ` +
-          `${seed.sales.length} sales and ${seed.referrals.length} referrals into "${database}".`,
+          `${seed.sales.length} sales and ${seed.referrals.length} referrals into "${path}".`,
       )
     }
   }

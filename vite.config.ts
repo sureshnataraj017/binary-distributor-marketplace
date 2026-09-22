@@ -18,11 +18,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    // Clears leftover test schemas in PostgreSQL before the run. Tests need the PostgreSQL server running.
+    // Clears leftover SQLite test database files before the run.
     globalSetup: ['./server/globalSetup.ts'],
     css: false,
-    // Real database round trips are slower than the in-memory tests they replace.
-    testTimeout: 20_000,
-    hookTimeout: 30_000,
   },
 })

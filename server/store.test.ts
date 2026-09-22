@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { TEST_DATABASE, createTestStore, type TestStore } from './testing'
+import { createTestStore, type TestStore } from './testing'
 import { loadFixtures } from './fixtures'
 import { migrate } from './db'
 import { generateSeed } from './seed'
@@ -74,9 +74,11 @@ describe('an empty database', () => {
     expect(await ctx.store.referrals.get('REF-0000')).toBeUndefined()
   })
 
-  it('is at the latest schema, and re-running migrations changes nothing', async () => {
-    expect(await migrate(ctx.store.pool)).toEqual([])
-    const { rows } = await ctx.store.pool.query('SELECT name FROM schema_migrations')
+  it('is at the latest schema, and re-running migrations changes nothing', () => {
+    expect(migrate(ctx.store.raw)).toEqual([])
+    const rows = ctx.store.raw.prepare('SELECT name FROM schema_migrations').all() as {
+      name: string
+    }[]
     expect(rows.map((r) => r.name)).toEqual(['001_init.sql'])
   })
 })
@@ -131,8 +133,8 @@ describe('storing records one by one', () => {
 
     const s = (await store.sales.listByRetailer('RET-1001'))[0]!
     expect(s).toMatchObject({ amount: 10_000, retailerCommission: 3_000, remainder: 5_800 })
-    expect(typeof s.amount).toBe('number') // BIGINT comes back as a number, not a string
-    expect(new Date(s.date).toISOString()).toBe(s.date) // TIMESTAMPTZ comes back as an ISO string
+    expect(typeof s.amount).toBe('number')
+    expect(new Date(s.date).toISOString()).toBe(s.date) // stored and read back as an ISO string
   })
 
   it('updates a retailer status and marks a referral paid', async () => {
@@ -162,7 +164,7 @@ describe('storing records one by one', () => {
   })
 })
 
-describe('rules enforced by PostgreSQL itself', () => {
+describe('rules enforced by SQLite itself', () => {
   let ctx: TestStore
   let store: Store
   beforeAll(async () => {
@@ -179,7 +181,7 @@ describe('rules enforced by PostgreSQL itself', () => {
       store.distributors.create(
         distributor({ name: 'Rival', parentId: 'DIST-001', position: 'LEFT' }),
       ),
-    ).rejects.toMatchObject({ code: '23505', constraint: 'distributors_parent_id_position_key' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_UNIQUE' })
     // The other side is still free.
     await expect(
       store.distributors.create(
@@ -191,34 +193,34 @@ describe('rules enforced by PostgreSQL itself', () => {
   it('ties placement to a side: a parent needs LEFT/RIGHT, a top-level one must have none', async () => {
     await expect(
       store.distributors.create(distributor({ parentId: 'DIST-001', position: null })),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
     await expect(
       store.distributors.create(distributor({ parentId: null, position: 'LEFT' })),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
   })
 
   it('refuses a parent or referrer that does not exist (foreign key)', async () => {
     await expect(
       store.distributors.create(distributor({ parentId: 'DIST-999', position: 'LEFT' })),
-    ).rejects.toMatchObject({ code: '23503' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_FOREIGNKEY' })
     await expect(
       store.distributors.create(distributor({ referredBy: 'DIST-999' })),
-    ).rejects.toMatchObject({ code: '23503' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_FOREIGNKEY' })
     await expect(store.retailers.create(retailer('DIST-999'))).rejects.toMatchObject({
-      code: '23503',
+      code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
     })
     await expect(store.sales.create(sale('RET-0', 'DIST-001'))).rejects.toMatchObject({
-      code: '23503',
+      code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
     })
   })
 
   it("refuses a sale whose shares don't add up to the amount, or a non-positive amount/quantity", async () => {
     await expect(
       store.sales.create(sale('RET-1001', 'DIST-001', { remainder: 5_799 })),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
     await expect(
       store.sales.create(sale('RET-1001', 'DIST-001', { quantity: 0 })),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
     await expect(
       store.sales.create(
         sale('RET-1001', 'DIST-001', {
@@ -229,16 +231,16 @@ describe('rules enforced by PostgreSQL itself', () => {
           remainder: 0,
         }),
       ),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
   })
 
   it('refuses an invalid retailer status, a blank name, and a distributor referring themselves', async () => {
     await expect(
       store.retailers.create(retailer('DIST-001', { status: 'BOGUS' as never })),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
     await expect(
       store.retailers.create(retailer('DIST-001', { name: '   ' })),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
     await expect(
       store.referrals.create({
         referringDistributorId: 'DIST-001',
@@ -249,7 +251,7 @@ describe('rules enforced by PostgreSQL itself', () => {
         commission: 10,
         paymentStatus: 'PENDING',
       }),
-    ).rejects.toMatchObject({ code: '23514' })
+    ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_CHECK' })
   })
 
   it('a rejected write stores nothing', async () => {
@@ -260,29 +262,22 @@ describe('rules enforced by PostgreSQL itself', () => {
 })
 
 describe('persistence', () => {
-  it('keeps every record after the server restarts (a fresh connection to the same database)', async () => {
+  it('keeps every record after the server restarts (a fresh connection to the same file)', async () => {
     const ctx = await createTestStore()
-    try {
-      const d = await ctx.store.distributors.create(distributor())
-      const r = await ctx.store.retailers.create(retailer(d.id))
-      const s = await ctx.store.sales.create(sale(r.id, d.id))
-      await ctx.store.close() // "the server stops"
+    const d = await ctx.store.distributors.create(distributor())
+    const r = await ctx.store.retailers.create(retailer(d.id))
+    const s = await ctx.store.sales.create(sale(r.id, d.id))
+    await ctx.store.close() // "the server stops"
 
-      const restarted = await createStore({ database: TEST_DATABASE, schema: ctx.schema })
-      try {
-        expect((await restarted.distributors.get(d.id))!.retailerIds).toEqual([r.id])
-        expect((await restarted.sales.list()).map((x) => x.id)).toEqual([s.id])
-        // Numbering continues where it left off rather than starting over.
-        expect((await restarted.sales.create(sale(r.id, d.id))).id).toBe('INV-1002')
-      } finally {
-        await restarted.close()
-      }
+    const restarted = await createStore({ path: ctx.path })
+    try {
+      expect((await restarted.distributors.get(d.id))!.retailerIds).toEqual([r.id])
+      expect((await restarted.sales.list()).map((x) => x.id)).toEqual([s.id])
+      // Numbering continues where it left off rather than starting over.
+      expect((await restarted.sales.create(sale(r.id, d.id))).id).toBe('INV-1002')
     } finally {
-      // ctx.store is already closed; only drop the schema.
-      const { createPool } = await import('./db')
-      const admin = createPool({ database: TEST_DATABASE })
-      await admin.query(`DROP SCHEMA ${ctx.schema} CASCADE`)
-      await admin.end()
+      await restarted.close()
+      await ctx.dispose() // store is already closed; this just deletes the file
     }
   })
 })

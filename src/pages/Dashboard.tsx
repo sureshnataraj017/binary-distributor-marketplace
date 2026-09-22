@@ -1,3 +1,14 @@
+import {
+  ArrowLeftRight,
+  Briefcase,
+  Building2,
+  IndianRupee,
+  ShoppingBag,
+  Store,
+  Target,
+  Users,
+  Wallet,
+} from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { CommissionMix } from '@/components/features/CommissionMix'
@@ -69,7 +80,7 @@ export default function Dashboard() {
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               to="/distributors"
-              className="rounded-lg bg-brand-solid px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+              className="rounded-lg bg-linear-to-r from-brand-solid to-brand-2 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:shadow-md hover:brightness-105"
             >
               Add your first distributor
             </Link>
@@ -87,23 +98,27 @@ export default function Dashboard() {
         <DashboardCard
           label="Total distributors"
           value={metrics?.totalDistributors}
+          icon={Users}
           loading={loading}
         />
         <DashboardCard
           label="Total retailers"
           value={metrics?.totalRetailers}
           hint="Active retailers"
+          icon={Store}
           loading={loading}
         />
         <DashboardCard
           label="Today's sales"
           value={metrics && formatCurrency(metrics.todaysSales)}
+          icon={IndianRupee}
           loading={loading}
         />
         <DashboardCard
           label="Total commissions"
           value={metrics && formatCurrency(metrics.totalCommissions)}
           hint="Distributor + retailer + referral + company"
+          icon={Wallet}
           loading={loading}
         />
 
@@ -114,6 +129,7 @@ export default function Dashboard() {
             onboarding &&
             `${onboarding.remaining} remaining · ${formatCurrency(onboarding.bonus)} bonus today`
           }
+          icon={Target}
           loading={loading}
         >
           {onboarding && (
@@ -131,6 +147,7 @@ export default function Dashboard() {
           accent="series-1"
           value={metrics && formatCurrency(metrics.distributorCommissions)}
           hint={`${rates.distributorPercentage}% of sales + onboarding bonuses`}
+          icon={Briefcase}
           loading={loading}
         />
         <DashboardCard
@@ -138,6 +155,7 @@ export default function Dashboard() {
           accent="series-2"
           value={metrics && formatCurrency(metrics.retailerCommissions)}
           hint={`${rates.retailerPercentage}% of retailer sales`}
+          icon={ShoppingBag}
           loading={loading}
         />
         <DashboardCard
@@ -145,6 +163,7 @@ export default function Dashboard() {
           accent="series-3"
           value={metrics && formatCurrency(metrics.referralCommissions)}
           hint={`${referralPercentage}% of referred distributor fees`}
+          icon={ArrowLeftRight}
           loading={loading}
         />
         <DashboardCard
@@ -152,18 +171,19 @@ export default function Dashboard() {
           accent="series-4"
           value={metrics && formatCurrency(metrics.companyCommission)}
           hint={`${rates.companyPercentage}% of downline sales`}
+          icon={Building2}
           loading={loading}
         />
       </section>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-5">
-        <Card className="p-4 lg:col-span-3">
+        <Card className="p-4 transition-shadow duration-200 hover:shadow-md lg:col-span-3">
           <h2 className="font-semibold">Sales, last 14 days</h2>
           <p className="mb-3 text-xs text-ink-2">Daily totals in the business time zone (IST)</p>
           {loading ? <Skeleton className="h-56 w-full" /> : <SalesChart data={daily} />}
         </Card>
 
-        <Card className="p-4 lg:col-span-2">
+        <Card className="p-4 transition-shadow duration-200 hover:shadow-md lg:col-span-2">
           <h2 className="font-semibold">Where commissions go</h2>
           <p className="mb-4 text-xs text-ink-2">Share of total commissions by stream</p>
           {loading || !metrics ? (
@@ -174,7 +194,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <Card className="mt-4 p-4">
+      <Card className="mt-4 p-4 transition-shadow duration-200 hover:shadow-md">
         <h2 className="font-semibold">Today's onboarding leaders</h2>
         <p className="mb-3 text-xs text-ink-2">Qualifying retailers onboarded today</p>
         {loading ? (
@@ -183,8 +203,14 @@ export default function Dashboard() {
           <p className="py-4 text-sm text-ink-2">No qualifying onboardings yet today.</p>
         ) : (
           <ul className="divide-y divide-line">
-            {leaders.map((s) => (
-              <li key={s.distributorId} className="flex items-center gap-3 py-2.5">
+            {leaders.map((s, i) => (
+              <li
+                key={s.distributorId}
+                className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-hover"
+              >
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-brand">
+                  {i + 1}
+                </span>
                 <ProgressRing
                   percent={s.progress.achievementPct}
                   size={44}

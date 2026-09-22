@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: binary-marketplace
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /var/data/marketplace.db
+    disk:
+      name: marketplace-data
+      mountPath: /var/data
+      sizeGB: 1

@@ -1,3 +1,4 @@
+import { Download } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/common/DataTable'
@@ -155,6 +156,7 @@ export default function RetailerSales() {
         description="Every invoice with the split between retailer, distributor and company. The remainder is shown explicitly."
         actions={
           <Button onClick={exportCsv} disabled={filtered.length === 0}>
+            <Download className="size-4" />
             Export CSV
           </Button>
         }

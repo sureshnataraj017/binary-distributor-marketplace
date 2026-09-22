@@ -1,4 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
+import { ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { DistributorSummary } from '@/domain/metrics'
 import { useNetworkStore } from '@/store/networkStore'
@@ -69,9 +70,10 @@ function DistributorPopup({
       )}
       <Link
         to={`/distributors/${distributor.id}`}
-        className="mt-2 inline-block text-xs text-brand hover:underline"
+        className="mt-2 inline-flex items-center gap-0.5 text-xs text-brand hover:underline"
       >
-        {extra > 0 ? `+${extra} more · ` : ''}Open distributor details →
+        {extra > 0 ? `+${extra} more · ` : ''}Open distributor details
+        <ArrowRight aria-hidden="true" className="size-3" />
       </Link>
     </div>
   )

@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -89,7 +90,15 @@ export function DataTable<T>({
                       >
                         {column.header}
                         <span aria-hidden="true" className={active ? 'text-ink' : 'text-muted'}>
-                          {active ? (table.sort!.direction === 'asc' ? '▲' : '▼') : '↕'}
+                          {active ? (
+                            table.sort!.direction === 'asc' ? (
+                              <ChevronUp className="size-3.5" />
+                            ) : (
+                              <ChevronDown className="size-3.5" />
+                            )
+                          ) : (
+                            <ChevronsUpDown className="size-3.5" />
+                          )}
                         </span>
                       </button>
                     ) : (

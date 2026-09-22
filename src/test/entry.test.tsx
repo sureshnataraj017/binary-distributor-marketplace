@@ -4,11 +4,33 @@ import { describe, expect, it, vi } from 'vitest'
 import { emptyStore, renderApp } from './renderApp'
 
 /**
- * The first-time experience: a completely empty PostgreSQL database, and a person entering the data
- * one record at a time through the forms. The steps depend on each other, like a real session does.
+ * The first-time experience: a completely empty database, and a person entering the data one record
+ * at a time through the forms. The steps depend on each other, like a real session does.
  */
 const onEmpty = { onEmptyDatabase: true }
 const form = (name: string) => within(screen.getByRole('form', { name }))
+
+/**
+ * `Select`'s currently-chosen value (and any hint text) renders as plain text inside the same
+ * `<label>`, so an exact or substring match on the label text alone is unreliable — it can either
+ * miss (extra text appended) or, worse, false-match an unrelated field whose hint happens to mention
+ * the same word. Anchoring to the start of the label's text avoids both.
+ */
+const byLabel = (labelText: string) => new RegExp(`^${labelText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+
+/** `Select` renders a searchable listbox, not a native `<select>`: open it, then click the option. */
+const chooseOption = async (
+  scope: Pick<typeof screen, 'getByLabelText'>,
+  labelText: string | RegExp,
+  optionName: string,
+) => {
+  await userEvent.click(scope.getByLabelText(typeof labelText === 'string' ? byLabel(labelText) : labelText))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
+/** The text a `Select` is currently showing as chosen, read from the label wrapping it. */
+const selectedOption = (scope: Pick<typeof screen, 'getByLabelText'>, labelText: string) =>
+  scope.getByLabelText(byLabel(labelText)).closest('label')!
 
 describe('starting from an empty database', () => {
   it('shows a welcome and empty states instead of fake data', async () => {
@@ -40,7 +62,7 @@ describe('starting from an empty database', () => {
 
     const f = form('Add distributor')
     await userEvent.type(f.getByLabelText('Name'), 'Asha')
-    await userEvent.selectOptions(f.getByLabelText('State'), 'Tamil Nadu')
+    await chooseOption(f, 'State', 'Tamil Nadu')
     await userEvent.type(f.getByLabelText('City'), 'Chennai')
     await userEvent.click(f.getByRole('button', { name: 'Add distributor' }))
 
@@ -71,18 +93,19 @@ describe('starting from an empty database', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add distributor' }))
     const f = form('Add distributor')
     await userEvent.type(f.getByLabelText('Name'), 'Bala')
-    await userEvent.selectOptions(f.getByLabelText('State'), 'Kerala')
+    await chooseOption(f, 'State', 'Kerala')
     await userEvent.type(f.getByLabelText('City'), 'Kochi')
     await userEvent.click(f.getByLabelText('Under another distributor'))
-    await userEvent.selectOptions(f.getByLabelText('Parent distributor'), 'DIST-001')
+    await chooseOption(f, 'Parent distributor', 'Asha (DIST-001) · free: LEFT, RIGHT')
     // Both sides of DIST-001 are free, so the person must pick one.
-    expect(
-      within(f.getByLabelText('Side'))
-        .getAllByRole('option')
-        .map((o) => o.textContent),
-    ).toEqual(['Choose a side…', 'LEFT', 'RIGHT'])
-    await userEvent.selectOptions(f.getByLabelText('Side'), 'LEFT')
-    await userEvent.selectOptions(f.getByLabelText(/Referred by/), 'DIST-001')
+    await userEvent.click(f.getByLabelText(byLabel('Side')))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Choose a side…',
+      'LEFT',
+      'RIGHT',
+    ])
+    await userEvent.click(screen.getByRole('option', { name: 'LEFT' }))
+    await chooseOption(f, /Referred by/, 'Asha (DIST-001)')
     await userEvent.click(f.getByRole('button', { name: 'Add distributor' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Added Bala as DIST-002')
@@ -96,12 +119,11 @@ describe('starting from an empty database', () => {
     const f = form('Add distributor')
     await userEvent.click(f.getByLabelText('Under another distributor'))
     // DIST-001's LEFT is taken by Bala, so only RIGHT remains and is chosen automatically.
-    await userEvent.selectOptions(f.getByLabelText('Parent distributor'), 'DIST-001')
-    expect(f.getByLabelText('Side')).toHaveValue('RIGHT')
+    await chooseOption(f, 'Parent distributor', 'Asha (DIST-001) · free: RIGHT')
+    expect(within(selectedOption(f, 'Side')).getByText('RIGHT')).toBeInTheDocument()
     // Bala (DIST-002) has both sides free.
-    const options = within(f.getByLabelText('Parent distributor'))
-      .getAllByRole('option')
-      .map((o) => o.textContent)
+    await userEvent.click(f.getByLabelText(byLabel('Parent distributor')))
+    const options = screen.getAllByRole('option').map((o) => o.textContent)
     expect(options.some((o) => o?.includes('Asha (DIST-001) · free: RIGHT'))).toBe(true)
     expect(options.some((o) => o?.includes('Bala (DIST-002) · free: LEFT, RIGHT'))).toBe(true)
   })
@@ -111,8 +133,8 @@ describe('starting from an empty database', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Onboard retailer' }))
     const f = form('Onboard retailer')
     await userEvent.type(f.getByLabelText('Shop name'), 'Sri Traders')
-    await userEvent.selectOptions(f.getByLabelText('Distributor'), 'DIST-002')
-    expect(f.getByLabelText('State')).toHaveValue('Kerala')
+    await chooseOption(f, 'Distributor', 'Bala (DIST-002) · Kerala')
+    expect(within(selectedOption(f, 'State')).getByText('Kerala')).toBeInTheDocument()
     expect(f.getByLabelText('City')).toHaveValue('Kochi')
     await userEvent.type(f.getByLabelText(/Phone/), '+91 98765 43210')
     await userEvent.click(f.getByRole('button', { name: 'Onboard retailer' }))
@@ -128,7 +150,7 @@ describe('starting from an empty database', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Onboard retailer' }))
     const f = form('Onboard retailer')
     await userEvent.type(f.getByLabelText('Shop name'), 'Copycat')
-    await userEvent.selectOptions(f.getByLabelText('Distributor'), 'DIST-002')
+    await chooseOption(f, 'Distributor', 'Bala (DIST-002) · Kerala')
     await userEvent.type(f.getByLabelText(/Phone/), '9876543210')
     await userEvent.click(f.getByRole('button', { name: 'Onboard retailer' }))
 
@@ -156,12 +178,12 @@ describe('starting from an empty database', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Record referral fee' }))
     const f = form('Record referral fee')
     // Only DIST-002 has a referrer (Asha), so only it can be chosen.
-    expect(
-      within(f.getByLabelText('Referred distributor'))
-        .getAllByRole('option')
-        .map((o) => o.textContent),
-    ).toEqual(['Choose a distributor…', 'Bala (DIST-002) · referred by Asha'])
-    await userEvent.selectOptions(f.getByLabelText('Referred distributor'), 'DIST-002')
+    await userEvent.click(f.getByLabelText(byLabel('Referred distributor')))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Choose a distributor…',
+      'Bala (DIST-002) · referred by Asha',
+    ])
+    await userEvent.click(screen.getByRole('option', { name: 'Bala (DIST-002) · referred by Asha' }))
     await userEvent.type(f.getByLabelText(/Fee/), '500')
     expect(await screen.findByText('Referral commission: $50.00')).toBeInTheDocument()
     await userEvent.click(f.getByRole('button', { name: 'Record referral' }))

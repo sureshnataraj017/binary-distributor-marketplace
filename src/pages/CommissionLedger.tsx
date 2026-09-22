@@ -1,3 +1,4 @@
+import { Download } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/common/DataTable'
@@ -113,6 +114,7 @@ export default function CommissionLedger() {
         description="Every commission event: onboarding bonuses, retailer sales, referrals and company downline commission."
         actions={
           <Button onClick={exportCsv} disabled={rows.length === 0}>
+            <Download className="size-4" />
             Export CSV
           </Button>
         }

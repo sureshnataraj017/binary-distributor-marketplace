@@ -1,22 +1,34 @@
+import {
+  ArrowLeftRight,
+  IndianRupee,
+  LayoutDashboard,
+  Moon,
+  Network,
+  Store,
+  Sun,
+  Users,
+} from 'lucide-react'
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom'
 import { StateFilter } from '@/components/common/StateFilter'
 import { useThemeStore } from '@/store/themeStore'
 
 const NAV = [
-  { to: '/dashboard', label: 'Dashboard', icon: '▦' },
-  { to: '/distributors', label: 'Distributors', icon: '☰', end: true },
-  { to: '/retailers', label: 'Retailers', icon: '⌂', end: true },
-  { to: '/distributors/network', label: 'Network', icon: '⑂' },
-  { to: '/commissions', label: 'Commissions', icon: '$' },
-  { to: '/referrals', label: 'Referrals', icon: '⇄' },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/distributors', label: 'Distributors', icon: Users, end: true },
+  { to: '/retailers', label: 'Retailers', icon: Store, end: true },
+  { to: '/distributors/network', label: 'Network', icon: Network },
+  { to: '/commissions', label: 'Commissions', icon: IndianRupee },
+  { to: '/referrals', label: 'Referrals', icon: ArrowLeftRight },
 ]
 
 /** Pages whose data follows the global state filter. */
 const SCOPED_ROUTES = NAV.map((item) => item.to)
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
-    isActive ? 'bg-brand-soft text-brand' : 'text-ink-2 hover:bg-hover hover:text-ink'
+  `flex items-center gap-2.5 whitespace-nowrap rounded-lg border-l-[3px] px-3 py-2 text-sm font-medium transition ${
+    isActive
+      ? 'border-brand bg-brand-soft text-brand'
+      : 'border-transparent text-ink-2 hover:bg-hover hover:text-ink'
   }`
 
 function ThemeToggle() {
@@ -28,7 +40,7 @@ function ThemeToggle() {
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
       className="rounded-lg border border-line-strong bg-surface px-2.5 py-1.5 text-sm text-ink-2 hover:bg-hover"
     >
-      {theme === 'dark' ? '☀' : '☾'}
+      {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
     </button>
   )
 }
@@ -46,11 +58,11 @@ export function AppLayout() {
         Skip to content
       </a>
 
-      <aside className="border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-r md:border-b-0">
+      <aside className="border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-r md:border-b-0 md:shadow-sm">
         <div className="flex items-center gap-2 px-4 py-3 md:py-5">
           <span
             aria-hidden="true"
-            className="flex size-8 items-center justify-center rounded-lg bg-brand-solid text-sm font-bold text-white"
+            className="flex size-8 items-center justify-center rounded-lg bg-linear-to-br from-brand-solid to-brand-2 text-sm font-bold text-white shadow-sm"
           >
             B
           </span>
@@ -65,9 +77,7 @@ export function AppLayout() {
         >
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
-              <span aria-hidden="true" className="w-4 text-center">
-                {item.icon}
-              </span>
+              <item.icon aria-hidden="true" className="size-4 shrink-0" />
               {item.label}
             </NavLink>
           ))}

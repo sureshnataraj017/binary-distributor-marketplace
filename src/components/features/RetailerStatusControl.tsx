@@ -1,3 +1,4 @@
+import { Ban, CirclePause, CirclePlay, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { FormMessage } from '@/components/common/FormField'
 import { Button } from '@/components/ui/Button'
@@ -5,20 +6,25 @@ import { useSetRetailerStatus } from '@/hooks/useEntryMutations'
 import { ApiError } from '@/services/apiClient'
 import type { Retailer, RetailerStatus } from '@/types'
 
-const ACTIONS: Record<RetailerStatus, { to: RetailerStatus; label: string; confirm?: string }[]> = {
+const ACTIONS: Record<
+  RetailerStatus,
+  { to: RetailerStatus; label: string; icon: LucideIcon; confirm?: string }[]
+> = {
   ACTIVE: [
-    { to: 'DEACTIVATED', label: 'Deactivate' },
+    { to: 'DEACTIVATED', label: 'Deactivate', icon: CirclePause },
     {
       to: 'CANCELLED',
       label: 'Cancel retailer',
+      icon: Ban,
       confirm: 'Cancel this retailer? A cancelled retailer can never be reactivated.',
     },
   ],
   DEACTIVATED: [
-    { to: 'ACTIVE', label: 'Reactivate' },
+    { to: 'ACTIVE', label: 'Reactivate', icon: CirclePlay },
     {
       to: 'CANCELLED',
       label: 'Cancel retailer',
+      icon: Ban,
       confirm: 'Cancel this retailer? A cancelled retailer can never be reactivated.',
     },
   ],
@@ -54,6 +60,7 @@ export function RetailerStatusControl({ retailer }: { retailer: Retailer }) {
           disabled={setStatus.isPending}
           onClick={() => run(action.to, action.confirm)}
         >
+          <action.icon className="size-4" />
           {action.label}
         </Button>
       ))}

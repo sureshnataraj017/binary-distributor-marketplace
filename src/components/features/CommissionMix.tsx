@@ -28,9 +28,9 @@ export function CommissionMix({ metrics }: { metrics: DashboardMetrics }) {
                 <span className="ml-2 text-xs text-ink-2">{share.toFixed(1)}%</span>
               </span>
             </div>
-            <div className="h-2 rounded-full bg-hover" aria-hidden="true">
+            <div className="h-2.5 rounded-full bg-hover" aria-hidden="true">
               <div
-                className={`h-2 rounded-full ${row.color}`}
+                className={`h-2.5 rounded-full transition-[width] duration-500 ${row.color}`}
                 style={{ width: `${(row.value / max) * 100}%` }}
               />
             </div>

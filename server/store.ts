@@ -1,4 +1,4 @@
-import type pg from 'pg'
+import type Database from 'better-sqlite3'
 import { defaultCommissionConfig as config } from '@/config/commissionConfig'
 import { buildLedger } from '@/domain/ledger'
 import type {
@@ -10,7 +10,7 @@ import type {
   RetailerStatus,
   Sale,
 } from '@/types'
-import { createPool, migrate, type ConnectionOptions } from './db'
+import { migrate, openDatabase } from './db'
 
 export interface NewDistributor {
   name: string
@@ -68,8 +68,8 @@ export interface Store {
   }
   /** Derived from sales, onboardings and referrals, so it is always current. Nothing is stored twice. */
   ledger(now?: Date): Promise<LedgerEntry[]>
-  /** The underlying pool. For migrations, fixtures and tests only. */
-  readonly pool: pg.Pool
+  /** The underlying connection. For migrations, fixtures and tests only. */
+  readonly raw: Database.Database
   close(): Promise<void>
 }
 
@@ -83,7 +83,6 @@ interface DistributorRow {
   referred_by: string | null
   daily_target: number
   joined_at: string
-  retailer_ids: string[]
 }
 interface RetailerRow {
   id: string
@@ -119,7 +118,7 @@ interface ReferralRow {
   payment_status: Referral['paymentStatus']
 }
 
-const toDistributor = (r: DistributorRow): Distributor => ({
+const toDistributor = (r: DistributorRow, retailerIds: string[]): Distributor => ({
   id: r.id,
   name: r.name,
   state: r.state,
@@ -127,7 +126,7 @@ const toDistributor = (r: DistributorRow): Distributor => ({
   parentId: r.parent_id,
   position: r.position,
   referredBy: r.referred_by,
-  retailerIds: r.retailer_ids,
+  retailerIds,
   dailyTarget: r.daily_target,
   joinedAt: r.joined_at,
 })
@@ -170,181 +169,188 @@ const toReferral = (r: ReferralRow): Referral => ({
 
 // Ids look like DIST-001 / RET-1001 / INV-1001 / REF-0001. Sort by length first so DIST-1000 follows DIST-999.
 const BY_ID = 'ORDER BY length(id), id'
-const DISTRIBUTOR_SELECT = `
-  SELECT d.*, COALESCE(array_agg(r.id ORDER BY length(r.id), r.id) FILTER (WHERE r.id IS NOT NULL), '{}') AS retailer_ids
-  FROM distributors d
-  LEFT JOIN retailers r ON r.distributor_id = d.id`
 
-/** Opens the connection pool and brings the schema up to date. */
-export async function createStore(options: ConnectionOptions = {}): Promise<Store> {
-  const pool = createPool(options)
+export interface StoreOptions {
+  /** File path, or ':memory:' for a throwaway database (tests). Defaults to server/data/marketplace.db. */
+  path?: string
+}
+
+/** Opens the database and brings the schema up to date. */
+export async function createStore({ path = 'server/data/marketplace.db' }: StoreOptions = {}): Promise<Store> {
+  const db = openDatabase(path)
   try {
-    await migrate(pool)
+    migrate(db)
   } catch (error) {
-    await pool.end()
+    db.close()
     throw error
+  }
+
+  /** Claims the next raw numeric value of a named counter. */
+  function claimCounter(counter: string): number {
+    const row = db
+      .prepare<[string], { value: number }>(
+        'UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value',
+      )
+      .get(counter)
+    if (!row) throw new Error(`Unknown counter: ${counter}`)
+    return row.value
+  }
+
+  /** Claims the next value of a named counter, formatted as a readable, (optionally) zero-padded id. */
+  function nextId(counter: string, prefix: string, pad = 0): string {
+    return `${prefix}-${String(claimCounter(counter)).padStart(pad, '0')}`
+  }
+
+  /** Every retailer id owned by each distributor, in id order — attached to the Distributor read model. */
+  function retailerIdsByDistributor(): Map<string, string[]> {
+    const rows = db
+      .prepare<[], { id: string; distributor_id: string }>(`SELECT id, distributor_id FROM retailers ${BY_ID}`)
+      .all()
+    const map = new Map<string, string[]>()
+    for (const row of rows) {
+      const list = map.get(row.distributor_id)
+      if (list) list.push(row.id)
+      else map.set(row.distributor_id, [row.id])
+    }
+    return map
   }
 
   const store: Store = {
     distributors: {
       async list() {
-        const { rows } = await pool.query<DistributorRow>(
-          `${DISTRIBUTOR_SELECT} GROUP BY d.id ORDER BY length(d.id), d.id`,
-        )
-        return rows.map(toDistributor)
+        const rows = db
+          .prepare<[], DistributorRow>(`SELECT * FROM distributors ${BY_ID}`)
+          .all()
+        const byDistributor = retailerIdsByDistributor()
+        return rows.map((row) => toDistributor(row, byDistributor.get(row.id) ?? []))
       },
       async get(id) {
-        const { rows } = await pool.query<DistributorRow>(
-          `${DISTRIBUTOR_SELECT} WHERE d.id = $1 GROUP BY d.id`,
-          [id],
-        )
-        return rows[0] && toDistributor(rows[0])
+        const row = db
+          .prepare<[string], DistributorRow>('SELECT * FROM distributors WHERE id = ?')
+          .get(id)
+        if (!row) return undefined
+        const retailerIds = db
+          .prepare<[string], { id: string }>(`SELECT id FROM retailers WHERE distributor_id = ? ${BY_ID}`)
+          .all(id)
+          .map((r) => r.id)
+        return toDistributor(row, retailerIds)
       },
       async childAt(parentId, position) {
-        const { rows } = await pool.query<DistributorRow>(
-          `${DISTRIBUTOR_SELECT} WHERE d.parent_id = $1 AND d.position = $2 GROUP BY d.id`,
-          [parentId, position],
-        )
-        return rows[0] && toDistributor(rows[0])
+        const row = db
+          .prepare<
+            [string, Position],
+            DistributorRow
+          >('SELECT * FROM distributors WHERE parent_id = ? AND position = ?')
+          .get(parentId, position)
+        if (!row) return undefined
+        const retailerIds = db
+          .prepare<[string], { id: string }>(`SELECT id FROM retailers WHERE distributor_id = ? ${BY_ID}`)
+          .all(row.id)
+          .map((r) => r.id)
+        return toDistributor(row, retailerIds)
       },
       async create(input) {
-        const { rows } = await pool.query<DistributorRow>(
-          `INSERT INTO distributors (name, state, city, parent_id, position, referred_by, daily_target, joined_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING *, '{}'::text[] AS retailer_ids`,
-          [
-            input.name,
-            input.state,
-            input.city,
-            input.parentId,
-            input.position,
-            input.referredBy,
-            input.dailyTarget,
-            input.joinedAt,
-          ],
-        )
-        return toDistributor(rows[0]!)
+        const insert = db.transaction((): DistributorRow => {
+          const id = nextId('distributor', 'DIST', 3)
+          db.prepare(
+            `INSERT INTO distributors (id, name, state, city, parent_id, position, referred_by, daily_target, joined_at)
+             VALUES (@id, @name, @state, @city, @parentId, @position, @referredBy, @dailyTarget, @joinedAt)`,
+          ).run({ id, ...input })
+          return db.prepare<[string], DistributorRow>('SELECT * FROM distributors WHERE id = ?').get(id)!
+        })
+        return toDistributor(insert(), [])
       },
     },
 
     retailers: {
       async list() {
-        const { rows } = await pool.query<RetailerRow>(`SELECT * FROM retailers ${BY_ID}`)
-        return rows.map(toRetailer)
+        return db.prepare<[], RetailerRow>(`SELECT * FROM retailers ${BY_ID}`).all().map(toRetailer)
       },
       async get(id) {
-        const { rows } = await pool.query<RetailerRow>('SELECT * FROM retailers WHERE id = $1', [
-          id,
-        ])
-        return rows[0] && toRetailer(rows[0])
+        const row = db.prepare<[string], RetailerRow>('SELECT * FROM retailers WHERE id = ?').get(id)
+        return row && toRetailer(row)
       },
       async listByDistributor(distributorId) {
-        const { rows } = await pool.query<RetailerRow>(
-          `SELECT * FROM retailers WHERE distributor_id = $1 ${BY_ID}`,
-          [distributorId],
-        )
-        return rows.map(toRetailer)
+        return db
+          .prepare<[string], RetailerRow>(`SELECT * FROM retailers WHERE distributor_id = ? ${BY_ID}`)
+          .all(distributorId)
+          .map(toRetailer)
       },
       async create(input) {
-        const { rows } = await pool.query<RetailerRow>(
-          `INSERT INTO retailers (name, distributor_id, state, city, phone, onboarded_at, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING *`,
-          [
-            input.name,
-            input.distributorId,
-            input.state,
-            input.city,
-            input.phone,
-            input.onboardedAt,
-            input.status,
-          ],
-        )
-        return toRetailer(rows[0]!)
+        const insert = db.transaction((): RetailerRow => {
+          const id = nextId('retailer', 'RET')
+          db.prepare(
+            `INSERT INTO retailers (id, name, distributor_id, state, city, phone, onboarded_at, status)
+             VALUES (@id, @name, @distributorId, @state, @city, @phone, @onboardedAt, @status)`,
+          ).run({ id, ...input })
+          return db.prepare<[string], RetailerRow>('SELECT * FROM retailers WHERE id = ?').get(id)!
+        })
+        return toRetailer(insert())
       },
       async setStatus(id, status) {
-        const { rows } = await pool.query<RetailerRow>(
-          'UPDATE retailers SET status = $2 WHERE id = $1 RETURNING *',
-          [id, status],
-        )
-        return rows[0] && toRetailer(rows[0])
+        db.prepare('UPDATE retailers SET status = ? WHERE id = ?').run(status, id)
+        const row = db.prepare<[string], RetailerRow>('SELECT * FROM retailers WHERE id = ?').get(id)
+        return row && toRetailer(row)
       },
     },
 
     sales: {
       async list() {
-        const { rows } = await pool.query<SaleRow>('SELECT * FROM sales ORDER BY invoice_no')
-        return rows.map(toSale)
+        return db.prepare<[], SaleRow>('SELECT * FROM sales ORDER BY invoice_no').all().map(toSale)
       },
       async listByRetailer(retailerId) {
-        const { rows } = await pool.query<SaleRow>(
-          'SELECT * FROM sales WHERE retailer_id = $1 ORDER BY invoice_no',
-          [retailerId],
-        )
-        return rows.map(toSale)
+        return db
+          .prepare<[string], SaleRow>('SELECT * FROM sales WHERE retailer_id = ? ORDER BY invoice_no')
+          .all(retailerId)
+          .map(toSale)
       },
       async create(input) {
-        // The invoice number comes from a sequence: unique and increasing, even under concurrent requests.
-        // (A failed insert can leave a gap in the numbering; that is normal for sequences.)
-        const { rows } = await pool.query<SaleRow>(
-          `INSERT INTO sales (retailer_id, distributor_id, date, product, quantity, amount,
-             retailer_commission, distributor_commission, company_commission, remainder)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-           RETURNING *`,
-          [
-            input.retailerId,
-            input.distributorId,
-            input.date,
-            input.product,
-            input.quantity,
-            input.amount,
-            input.retailerCommission,
-            input.distributorCommission,
-            input.companyCommission,
-            input.remainder,
-          ],
-        )
-        return toSale(rows[0]!)
+        // The invoice number comes from a counter claimed inside the same transaction as the insert:
+        // unique and increasing, and — because better-sqlite3 calls are synchronous — safe even when
+        // several requests race, since no other JavaScript runs between the claim and the insert.
+        const insert = db.transaction((): SaleRow => {
+          const invoiceNo = claimCounter('sale_invoice')
+          const id = `INV-${invoiceNo}`
+          db.prepare(
+            `INSERT INTO sales (id, invoice_no, retailer_id, distributor_id, date, product, quantity, amount,
+               retailer_commission, distributor_commission, company_commission, remainder)
+             VALUES (@id, @invoiceNo, @retailerId, @distributorId, @date, @product, @quantity, @amount,
+               @retailerCommission, @distributorCommission, @companyCommission, @remainder)`,
+          ).run({ id, invoiceNo, ...input })
+          return db.prepare<[string], SaleRow>('SELECT * FROM sales WHERE id = ?').get(id)!
+        })
+        return toSale(insert())
       },
     },
 
     referrals: {
       async list() {
-        const { rows } = await pool.query<ReferralRow>(
-          'SELECT * FROM referrals ORDER BY date DESC, length(id), id',
-        )
-        return rows.map(toReferral)
+        return db
+          .prepare<[], ReferralRow>('SELECT * FROM referrals ORDER BY date DESC, length(id), id')
+          .all()
+          .map(toReferral)
       },
       async get(id) {
-        const { rows } = await pool.query<ReferralRow>('SELECT * FROM referrals WHERE id = $1', [
-          id,
-        ])
-        return rows[0] && toReferral(rows[0])
+        const row = db.prepare<[string], ReferralRow>('SELECT * FROM referrals WHERE id = ?').get(id)
+        return row && toReferral(row)
       },
       async create(input) {
-        const { rows } = await pool.query<ReferralRow>(
-          `INSERT INTO referrals (referring_distributor_id, referred_distributor_id, date, fee, percentage,
-             commission, payment_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING *`,
-          [
-            input.referringDistributorId,
-            input.referredDistributorId,
-            input.date,
-            input.fee,
-            input.percentage,
-            input.commission,
-            input.paymentStatus,
-          ],
-        )
-        return toReferral(rows[0]!)
+        const insert = db.transaction((): ReferralRow => {
+          const id = nextId('referral', 'REF', 4)
+          db.prepare(
+            `INSERT INTO referrals (id, referring_distributor_id, referred_distributor_id, date, fee,
+               percentage, commission, payment_status)
+             VALUES (@id, @referringDistributorId, @referredDistributorId, @date, @fee, @percentage,
+               @commission, @paymentStatus)`,
+          ).run({ id, ...input })
+          return db.prepare<[string], ReferralRow>('SELECT * FROM referrals WHERE id = ?').get(id)!
+        })
+        return toReferral(insert())
       },
       async markPaid(id) {
-        const { rows } = await pool.query<ReferralRow>(
-          `UPDATE referrals SET payment_status = 'PAID' WHERE id = $1 RETURNING *`,
-          [id],
-        )
-        return rows[0] && toReferral(rows[0])
+        db.prepare(`UPDATE referrals SET payment_status = 'PAID' WHERE id = ?`).run(id)
+        const row = db.prepare<[string], ReferralRow>('SELECT * FROM referrals WHERE id = ?').get(id)
+        return row && toReferral(row)
       },
     },
 
@@ -358,8 +364,10 @@ export async function createStore(options: ConnectionOptions = {}): Promise<Stor
       return buildLedger({ distributors, retailers, sales, referrals, now: at, config })
     },
 
-    pool,
-    close: () => pool.end(),
+    raw: db,
+    async close() {
+      if (db.open) db.close()
+    },
   }
   return store
 }

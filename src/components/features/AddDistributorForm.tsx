@@ -1,8 +1,10 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useId, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { FormField, FormMessage, controlClass } from '@/components/common/FormField'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { DatePicker } from '@/components/ui/DatePicker'
+import { Select } from '@/components/ui/Select'
 import { defaultCommissionConfig } from '@/config/commissionConfig'
 import { INDIA_STATES } from '@/config/indiaStates'
 import { businessDayKey } from '@/domain/dateUtils'
@@ -29,6 +31,7 @@ export function AddDistributorForm({ distributors, onClose }: Props) {
   const [added, setAdded] = useState<Distributor | null>(null)
   const create = useCreateDistributor()
   const now = useNow()
+  const uid = useId()
 
   const openSlots = useMemo(() => findOpenSlots(distributors), [distributors])
   const isFirst = distributors.length === 0
@@ -100,20 +103,17 @@ export function AddDistributorForm({ distributors, onClose }: Props) {
             className={controlClass}
           />
         </FormField>
-        <FormField label="State" error={shown.state}>
-          <select
+        <FormField label="State" id={`${uid}-state`} error={shown.state}>
+          <Select
+            inputId={`${uid}-state`}
             value={values.state}
-            onChange={(e) => set({ state: e.target.value })}
-            aria-invalid={!!shown.state}
-            className={controlClass}
-          >
-            <option value="">Choose a state…</option>
-            {INDIA_STATES.map((state) => (
-              <option key={state} value={state}>
-                {state}
-              </option>
-            ))}
-          </select>
+            onChange={(state) => set({ state })}
+            invalid={!!shown.state}
+            options={[
+              { value: '', label: 'Choose a state…' },
+              ...INDIA_STATES.map((state) => ({ value: state, label: state })),
+            ]}
+          />
         </FormField>
         <FormField label="City" error={shown.city}>
           <input
@@ -164,69 +164,64 @@ export function AddDistributorForm({ distributors, onClose }: Props) {
 
         {values.placement === 'UNDER' && (
           <>
-            <FormField label="Parent distributor" error={shown.parentId}>
-              <select
+            <FormField label="Parent distributor" id={`${uid}-parent`} error={shown.parentId}>
+              <Select
+                inputId={`${uid}-parent`}
                 value={values.parentId}
-                onChange={(e) => chooseParent(e.target.value)}
-                aria-invalid={!!shown.parentId}
-                className={controlClass}
-              >
-                <option value="">Choose a distributor with a free side…</option>
-                {openSlots.map(({ parent, free }) => (
-                  <option key={parent.id} value={parent.id}>
-                    {parent.name} ({parent.id}) · free: {free.join(', ')}
-                  </option>
-                ))}
-              </select>
+                onChange={chooseParent}
+                invalid={!!shown.parentId}
+                options={[
+                  { value: '', label: 'Choose a distributor with a free side…' },
+                  ...openSlots.map(({ parent, free }) => ({
+                    value: parent.id,
+                    label: `${parent.name} (${parent.id}) · free: ${free.join(', ')}`,
+                  })),
+                ]}
+              />
             </FormField>
-            <FormField label="Side" error={shown.position}>
-              <select
+            <FormField label="Side" id={`${uid}-side`} error={shown.position}>
+              <Select
+                inputId={`${uid}-side`}
                 value={values.position}
                 disabled={!values.parentId}
-                onChange={(e) => set({ position: e.target.value as Position })}
-                aria-invalid={!!shown.position}
-                className={controlClass}
-              >
-                <option value="">Choose a side…</option>
-                {freeSides.map((side) => (
-                  <option key={side} value={side}>
-                    {side}
-                  </option>
-                ))}
-              </select>
+                onChange={(position) => set({ position: position as Position | '' })}
+                invalid={!!shown.position}
+                options={[
+                  { value: '', label: 'Choose a side…' },
+                  ...freeSides.map((side) => ({ value: side, label: side })),
+                ]}
+              />
             </FormField>
           </>
         )}
 
         <FormField
           label="Referred by (optional)"
+          id={`${uid}-referred-by`}
           hint="Who recruited them. This is separate from where they are placed."
         >
-          <select
+          <Select
+            inputId={`${uid}-referred-by`}
             value={values.referredBy}
-            onChange={(e) => set({ referredBy: e.target.value })}
-            className={controlClass}
-          >
-            <option value="">Nobody</option>
-            {distributors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({d.id})
-              </option>
-            ))}
-          </select>
+            onChange={(referredBy) => set({ referredBy })}
+            options={[
+              { value: '', label: 'Nobody' },
+              ...distributors.map((d) => ({ value: d.id, label: `${d.name} (${d.id})` })),
+            ]}
+          />
         </FormField>
         <FormField
           label="Joined on (optional)"
+          id={`${uid}-joined-on`}
           error={shown.joinedOn}
           hint="Leave empty for today."
         >
-          <input
-            type="date"
+          <DatePicker
+            id={`${uid}-joined-on`}
             max={businessDayKey(now, defaultCommissionConfig.businessTimeZone)}
             value={values.joinedOn}
-            onChange={(e) => set({ joinedOn: e.target.value })}
-            aria-invalid={!!shown.joinedOn}
-            className={controlClass}
+            onChange={(joinedOn) => set({ joinedOn })}
+            invalid={!!shown.joinedOn}
           />
         </FormField>
 
@@ -241,7 +236,7 @@ export function AddDistributorForm({ distributors, onClose }: Props) {
         {serverError && <FormMessage tone="error">{serverError}</FormMessage>}
         {added && (
           <FormMessage tone="success">
-            ✓ Added {added.name} as {added.id}.{' '}
+            Added {added.name} as {added.id}.{' '}
             <Link to={`/distributors/${added.id}`} className="underline">
               Open
             </Link>

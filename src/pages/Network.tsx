@@ -1,3 +1,4 @@
+import { ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { BinaryTree } from '@/components/features/BinaryTree'
@@ -62,12 +63,14 @@ export default function Network() {
         actions={
           <>
             <Button onClick={expandAll} disabled={collapsedIds.size === 0}>
+              <ChevronsUpDown className="size-4" />
               Expand all
             </Button>
             <Button
               onClick={() => collapseAll(tree.branchIds)}
               disabled={tree.branchIds.length === 0}
             >
+              <ChevronsDownUp className="size-4" />
               Collapse all
             </Button>
           </>
@@ -130,7 +133,7 @@ export default function Network() {
             action={
               <Link
                 to="/distributors"
-                className="rounded-lg bg-brand-solid px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                className="rounded-lg bg-linear-to-r from-brand-solid to-brand-2 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:shadow-md hover:brightness-105"
               >
                 Add a distributor
               </Link>

@@ -42,6 +42,12 @@ export function SalesChart({ data }: { data: DailySales[] }) {
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id="salesBarFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--series-1)" stopOpacity={1} />
+                <stop offset="100%" stopColor="var(--series-1)" stopOpacity={0.55} />
+              </linearGradient>
+            </defs>
             <CartesianGrid vertical={false} stroke="var(--line)" />
             <XAxis
               dataKey="day"
@@ -61,7 +67,7 @@ export function SalesChart({ data }: { data: DailySales[] }) {
             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--hover)' }} />
             <Bar
               dataKey="amount"
-              fill="var(--series-1)"
+              fill="url(#salesBarFill)"
               radius={[4, 4, 0, 0]}
               maxBarSize={24}
               isAnimationActive={false}

@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { FormField, FormMessage, controlClass } from '@/components/common/FormField'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { DatePicker } from '@/components/ui/DatePicker'
+import { Select } from '@/components/ui/Select'
 import { defaultCommissionConfig } from '@/config/commissionConfig'
 import { INDIA_STATES } from '@/config/indiaStates'
 import { businessDayKey } from '@/domain/dateUtils'
@@ -33,6 +35,7 @@ export function AddRetailerForm({ distributors, distributorId = '', onClose }: P
   const [added, setAdded] = useState<Retailer | null>(null)
   const create = useCreateRetailer()
   const now = useNow()
+  const uid = useId()
 
   const { errors, input } = validateRetailerForm(values, now)
   const shown = submitted ? errors : {}
@@ -106,20 +109,20 @@ export function AddRetailerForm({ distributors, distributorId = '', onClose }: P
               className={controlClass}
             />
           </FormField>
-          <FormField label="Distributor" error={shown.distributorId}>
-            <select
+          <FormField label="Distributor" id={`${uid}-distributor`} error={shown.distributorId}>
+            <Select
+              inputId={`${uid}-distributor`}
               value={values.distributorId}
-              onChange={(e) => chooseDistributor(e.target.value)}
-              aria-invalid={!!shown.distributorId}
-              className={controlClass}
-            >
-              <option value="">Choose a distributor…</option>
-              {distributors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.id}) · {d.state}
-                </option>
-              ))}
-            </select>
+              onChange={chooseDistributor}
+              invalid={!!shown.distributorId}
+              options={[
+                { value: '', label: 'Choose a distributor…' },
+                ...distributors.map((d) => ({
+                  value: d.id,
+                  label: `${d.name} (${d.id}) · ${d.state}`,
+                })),
+              ]}
+            />
           </FormField>
           <FormField label="City" error={shown.city}>
             <input
@@ -129,20 +132,17 @@ export function AddRetailerForm({ distributors, distributorId = '', onClose }: P
               className={controlClass}
             />
           </FormField>
-          <FormField label="State" error={shown.state}>
-            <select
+          <FormField label="State" id={`${uid}-state`} error={shown.state}>
+            <Select
+              inputId={`${uid}-state`}
               value={values.state}
-              onChange={(e) => set({ state: e.target.value })}
-              aria-invalid={!!shown.state}
-              className={controlClass}
-            >
-              <option value="">Choose a state…</option>
-              {INDIA_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {state}
-                </option>
-              ))}
-            </select>
+              onChange={(state) => set({ state })}
+              invalid={!!shown.state}
+              options={[
+                { value: '', label: 'Choose a state…' },
+                ...INDIA_STATES.map((state) => ({ value: state, label: state })),
+              ]}
+            />
           </FormField>
           <FormField
             label="Phone (optional)"
@@ -160,16 +160,16 @@ export function AddRetailerForm({ distributors, distributorId = '', onClose }: P
           </FormField>
           <FormField
             label="Onboarded on (optional)"
+            id={`${uid}-onboarded-on`}
             error={shown.onboardedOn}
             hint="Leave empty for today. Earlier days count as noon."
           >
-            <input
-              type="date"
+            <DatePicker
+              id={`${uid}-onboarded-on`}
               max={businessDayKey(now, defaultCommissionConfig.businessTimeZone)}
               value={values.onboardedOn}
-              onChange={(e) => set({ onboardedOn: e.target.value })}
-              aria-invalid={!!shown.onboardedOn}
-              className={controlClass}
+              onChange={(onboardedOn) => set({ onboardedOn })}
+              invalid={!!shown.onboardedOn}
             />
           </FormField>
           <div className="md:col-span-2">
@@ -184,7 +184,7 @@ export function AddRetailerForm({ distributors, distributorId = '', onClose }: P
         {serverError && <FormMessage tone="error">{serverError}</FormMessage>}
         {added && (
           <FormMessage tone="success">
-            ✓ Onboarded {added.name} as {added.id}.{' '}
+            Onboarded {added.name} as {added.id}.{' '}
             <Link to={`/retailers/${added.id}`} className="underline">
               Open
             </Link>

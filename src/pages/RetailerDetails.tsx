@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { RecordSaleForm } from '@/components/features/RecordSaleForm'
@@ -80,6 +81,7 @@ export default function RetailerDetails() {
               disabled={!canSell || formOpen}
               onClick={() => setFormOpen(true)}
             >
+              <Plus className="size-4" />
               Record a sale
             </Button>
             <Link

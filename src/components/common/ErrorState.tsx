@@ -1,3 +1,4 @@
+import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
@@ -9,9 +10,9 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
     >
       <div
         aria-hidden="true"
-        className="flex size-10 items-center justify-center rounded-full bg-critical-soft text-lg text-critical"
+        className="flex size-10 items-center justify-center rounded-full bg-critical-soft text-critical"
       >
-        !
+        <TriangleAlert className="size-5" />
       </div>
       <p className="font-medium">We couldn't load this</p>
       <p className="max-w-sm text-sm text-ink-2">{message}</p>

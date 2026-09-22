@@ -1,3 +1,4 @@
+import fastifyStatic from '@fastify/static'
 import Fastify from 'fastify'
 import { HttpError } from './errors'
 import { commissionRoutes } from './routes/commissions'
@@ -13,31 +14,30 @@ interface AppOptions {
   latencyMs?: number
   /** Honour the `x-simulate-error` request header (demo aid for error states). Never in production. */
   allowSimulatedErrors?: boolean
+  /** Absolute path to the built frontend (`dist`). When set, serves it and falls back to index.html for client-side routes. */
+  staticDir?: string
 }
 
 /**
  * The database is the last line of defence: if a rule slips past the API checks (or two requests race),
- * PostgreSQL rejects the write. Translate those errors into clear client errors instead of a generic 500.
+ * SQLite rejects the write. Translate those errors into clear client errors instead of a generic 500.
  */
 function describeDatabaseError(error: unknown): { status: number; message: string } | null {
-  const { code, constraint } = error as { code?: string; constraint?: string }
+  const { code, message } = error as { code?: string; message?: string }
   switch (code) {
-    case '23505': // unique_violation
-      return constraint === 'distributors_parent_id_position_key'
+    case 'SQLITE_CONSTRAINT_UNIQUE':
+    case 'SQLITE_CONSTRAINT_PRIMARYKEY':
+      return message?.includes('distributors.parent_id')
         ? {
             status: 409,
             message: 'That position is already taken. Choose the other side or another parent.',
           }
         : { status: 409, message: 'That record already exists.' }
-    case '23503': // foreign_key_violation
+    case 'SQLITE_CONSTRAINT_FOREIGNKEY':
       return { status: 422, message: 'This refers to a record that does not exist.' }
-    case '23514': // check_violation
-    case '23502': // not_null_violation
+    case 'SQLITE_CONSTRAINT_CHECK':
+    case 'SQLITE_CONSTRAINT_NOTNULL':
       return { status: 422, message: 'The data breaks a database rule and was not saved.' }
-    case '22P02': // invalid_text_representation
-    case '22007': // invalid_datetime_format
-    case '22008': // datetime_field_overflow
-      return { status: 400, message: 'One of the values is not valid.' }
     default:
       return null
   }
@@ -48,8 +48,13 @@ export function buildApp({
   logger = false,
   latencyMs = 0,
   allowSimulatedErrors = process.env.NODE_ENV !== 'production',
+  staticDir,
 }: AppOptions) {
   const app = Fastify({ logger })
+
+  if (staticDir) {
+    void app.register(fastifyStatic, { root: staticDir })
+  }
 
   app.addHook('onRequest', async (request) => {
     if (latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, latencyMs))
@@ -73,14 +78,18 @@ export function buildApp({
     })
   })
   app.setNotFoundHandler((request, reply) => {
+    if (staticDir && request.method === 'GET' && !request.url.startsWith('/api/')) {
+      void reply.sendFile('index.html')
+      return
+    }
     void reply
       .status(404)
       .send({ status: 404, message: `Route ${request.method} ${request.url} not found` })
   })
 
-  // Reports healthy only if the database answers, so a monitor notices when PostgreSQL is down.
+  // Reports healthy only if the database answers, so a monitor notices when it is unavailable.
   app.get('/api/health', async () => {
-    await store.pool.query('SELECT 1')
+    store.raw.prepare('SELECT 1').get()
     return { status: 'ok' }
   })
   distributorRoutes(app, store)

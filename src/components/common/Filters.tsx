@@ -1,4 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { Search } from 'lucide-react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
+import { DatePicker } from '@/components/ui/DatePicker'
+import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 
 const controlClass =
@@ -8,9 +11,17 @@ export function FilterBar({ children }: { children: ReactNode }) {
   return <div className="flex flex-wrap items-end gap-3">{children}</div>
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({
+  label,
+  id,
+  children,
+}: {
+  label: string
+  id?: string
+  children: ReactNode
+}) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
+    <label htmlFor={id} className="flex flex-col gap-1 text-xs font-medium text-ink-2">
       {label}
       {children}
     </label>
@@ -48,13 +59,19 @@ export function SearchInput({
 
   return (
     <Field label={label}>
-      <input
-        type="search"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder={placeholder}
-        className={`${controlClass} w-56`}
-      />
+      <div className="relative">
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted"
+        />
+        <input
+          type="search"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={placeholder}
+          className={`${controlClass} w-56 pl-8`}
+        />
+      </div>
     </Field>
   )
 }
@@ -68,26 +85,26 @@ export function DateRangeFilter({
   to: string
   onChange: (range: { from: string; to: string }) => void
 }) {
+  const fromId = useId()
+  const toId = useId()
   const invalid = !!from && !!to && from > to
   return (
     <>
-      <Field label="From">
-        <input
-          type="date"
+      <Field label="From" id={fromId}>
+        <DatePicker
+          id={fromId}
           value={from}
           max={to || undefined}
-          onChange={(e) => onChange({ from: e.target.value, to })}
-          className={controlClass}
+          onChange={(value) => onChange({ from: value, to })}
         />
       </Field>
-      <Field label="To">
-        <input
-          type="date"
+      <Field label="To" id={toId}>
+        <DatePicker
+          id={toId}
           value={to}
           min={from || undefined}
-          aria-invalid={invalid}
-          onChange={(e) => onChange({ from, to: e.target.value })}
-          className={controlClass}
+          invalid={invalid}
+          onChange={(value) => onChange({ from, to: value })}
         />
       </Field>
       {(from || to) && (
@@ -110,19 +127,18 @@ export function SelectFilter<T extends string>({
   options: readonly { value: T | ''; label: string }[]
   onChange: (value: T | '') => void
 }) {
+  const id = useId()
   return (
-    <Field label={label}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as T | '')}
-        className={controlClass}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+    <Field label={label} id={id}>
+      <div className="w-44">
+        <Select
+          inputId={id}
+          isClearable={false}
+          value={value}
+          onChange={(v) => onChange(v as T | '')}
+          options={options}
+        />
+      </div>
     </Field>
   )
 }

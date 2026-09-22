@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { ALL_STATES, INDIA_STATES } from '@/config/indiaStates'
 import { distributorService } from '@/services/distributorService'
+import { Select } from '@/components/ui/Select'
 import { useFilterStore } from '@/store/filterStore'
 
 /** Global India state filter. Scopes KPIs, lists, ledger and the network tree. */
@@ -21,31 +22,33 @@ export function StateFilter() {
 
   const withData = INDIA_STATES.filter((s) => counts.has(s))
   const withoutData = INDIA_STATES.filter((s) => !counts.has(s))
+  const id = useId()
 
   return (
-    <label className="flex items-center gap-2 text-sm text-ink-2">
+    <label htmlFor={id} className="flex items-center gap-2 text-sm text-ink-2">
       <span className="hidden sm:inline">State</span>
-      <select
-        value={selectedState}
-        onChange={(e) => setSelectedState(e.target.value)}
-        className="rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink"
-      >
-        <option value={ALL_STATES}>All India ({distributors?.length ?? '…'})</option>
-        <optgroup label="States with distributors">
-          {withData.map((state) => (
-            <option key={state} value={state}>
-              {state} ({counts.get(state)})
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label="No distributors yet">
-          {withoutData.map((state) => (
-            <option key={state} value={state}>
-              {state}
-            </option>
-          ))}
-        </optgroup>
-      </select>
+      <div className="w-56">
+        <Select
+          inputId={id}
+          isClearable={false}
+          value={selectedState}
+          onChange={setSelectedState}
+          options={[
+            { value: ALL_STATES, label: `All India (${distributors?.length ?? '…'})` },
+            {
+              label: 'States with distributors',
+              options: withData.map((state) => ({
+                value: state,
+                label: `${state} (${counts.get(state)})`,
+              })),
+            },
+            {
+              label: 'No distributors yet',
+              options: withoutData.map((state) => ({ value: state, label: state })),
+            },
+          ]}
+        />
+      </div>
     </label>
   )
 }

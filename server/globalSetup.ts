@@ -1,6 +1,6 @@
-import { dropStaleTestSchemas } from './testing'
+import { dropStaleTestDatabases } from './testing'
 
-/** Runs once before the test suite: clears schemas left behind by any interrupted earlier run. */
-export default async function setup() {
-  await dropStaleTestSchemas()
+/** Runs once before the test suite: clears test database files left behind by any interrupted earlier run. */
+export default function setup() {
+  dropStaleTestDatabases()
 }

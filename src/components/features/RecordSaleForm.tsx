@@ -1,3 +1,4 @@
+import { CircleAlert, CircleCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { FormField as Field, controlClass as inputClass } from '@/components/common/FormField'
 import { Button } from '@/components/ui/Button'
@@ -182,14 +183,19 @@ export function RecordSaleForm({ retailer, onClose }: { retailer: Retailer; onCl
 
       <div aria-live="polite" className="mt-3">
         {serverError && (
-          <p role="alert" className="rounded-lg bg-critical-soft px-3 py-2 text-sm text-critical">
+          <p
+            role="alert"
+            className="flex items-center gap-1.5 rounded-lg bg-critical-soft px-3 py-2 text-sm text-critical"
+          >
+            <CircleAlert aria-hidden="true" className="size-4 shrink-0" />
             {serverError}
           </p>
         )}
         {recorded && (
           <div role="status" className="rounded-lg bg-good-soft px-3 py-2 text-sm">
-            <p className="font-medium text-good">
-              ✓ Recorded {recorded.id} · {formatCurrency(recorded.amount, { precise: true })}
+            <p className="flex items-center gap-1.5 font-medium text-good">
+              <CircleCheck aria-hidden="true" className="size-4 shrink-0" />
+              Recorded {recorded.id} · {formatCurrency(recorded.amount, { precise: true })}
             </p>
             <p className="text-xs text-ink-2">Confirmed by the server:</p>
             <SplitList sale={recorded} />

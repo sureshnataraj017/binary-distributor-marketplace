@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { Check, Clock, X } from 'lucide-react'
+import type { ComponentType, ReactNode } from 'react'
 
 export type BadgeTone = 'neutral' | 'good' | 'warn' | 'critical' | 'brand'
 
@@ -10,16 +11,20 @@ const TONES: Record<BadgeTone, string> = {
   brand: 'bg-brand-soft text-brand',
 }
 
-const ICONS: Partial<Record<BadgeTone, string>> = { good: '✓', warn: '◔', critical: '✕' }
+const ICONS: Partial<Record<BadgeTone, ComponentType<{ className?: string }>>> = {
+  good: Check,
+  warn: Clock,
+  critical: X,
+}
 
 /** Status colours never carry meaning alone: a glyph and a text label always accompany them. */
 export function Badge({ tone = 'neutral', children }: { tone?: BadgeTone; children: ReactNode }) {
-  const icon = ICONS[tone]
+  const Icon = ICONS[tone]
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TONES[tone]}`}
     >
-      {icon && <span aria-hidden="true">{icon}</span>}
+      {Icon && <Icon aria-hidden="true" className="size-3" />}
       {children}
     </span>
   )
