@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { buildApp } from './app'
 import { loadEnv, resolveDbPath } from './db'
+import { loadFixtures } from './fixtures'
+import { generateSeed } from './seed'
 import { createStore } from './store'
 
 loadEnv()
@@ -20,6 +22,14 @@ async function main() {
     )
     process.exit(1)
   })
+
+  // On hosts without a persistent disk (e.g. Render's free tier), the database resets on every
+  // restart/spin-down. AUTO_SEED re-populates it on boot so the deployed app is never empty.
+  if (process.env.AUTO_SEED === 'true' && (await store.distributors.list()).length === 0) {
+    await loadFixtures(store, generateSeed(new Date()))
+    console.log('AUTO_SEED: database was empty, loaded the demo network.')
+  }
+
   const app = buildApp({ store, logger: true, latencyMs, staticDir })
 
   // Stop accepting requests, then close the database connection, on Ctrl+C / container stop.
