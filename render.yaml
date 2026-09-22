@@ -13,6 +13,10 @@ services:
         value: /var/data/marketplace.db
       - key: AUTO_SEED
         value: true
+      - key: DELETE_DB
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
     disk:
       name: marketplace-data
       mountPath: /var/data

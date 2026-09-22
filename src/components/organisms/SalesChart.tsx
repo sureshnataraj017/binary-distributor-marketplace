@@ -1,6 +1,7 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { DailySales } from '@/domain/metrics'
 import { formatCurrency } from '@/utils/currencyFormatter'
+import { formatShortDate } from '@/utils/dateFormatter'
 
 const shortDay = (day: string) => {
   const [, month, date] = day.split('-')
@@ -23,7 +24,7 @@ function ChartTooltip({
   if (!active || !point) return null
   return (
     <div className="rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-md">
-      <div className="font-medium">{point.day}</div>
+      <div className="font-medium">{formatShortDate(point.day)}</div>
       <div className="text-ink-2">
         {formatCurrency(point.amount)} · {point.count} sale{point.count === 1 ? '' : 's'}
       </div>
@@ -95,7 +96,7 @@ export function SalesChart({ data }: { data: DailySales[] }) {
           <tbody>
             {data.map((d) => (
               <tr key={d.day} className="border-t border-line tabular-nums">
-                <td className="py-1">{d.day}</td>
+                <td className="py-1">{formatShortDate(d.day)}</td>
                 <td className="py-1 text-right">{formatCurrency(d.amount)}</td>
                 <td className="py-1 text-right">{d.count}</td>
               </tr>

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { buildApp } from './app'
 import { loadEnv, resolveDbPath } from './db'
-import { loadFixtures } from './fixtures'
+import { clearData, loadFixtures } from './fixtures'
 import { generateSeed } from './seed'
 import { createStore } from './store'
 
@@ -23,9 +23,15 @@ async function main() {
     process.exit(1)
   })
 
-  // On hosts without a persistent disk (e.g. Render's free tier), the database resets on every
-  // restart/spin-down. AUTO_SEED re-populates it on boot so the deployed app is never empty.
-  if (process.env.AUTO_SEED === 'true' && (await store.distributors.list()).length === 0) {
+  // DELETE_DB wipes the database on boot (set it, then restart the service from the Render
+  // dashboard). It takes priority over AUTO_SEED so a restart clears without immediately
+  // reseeding; unset (or set back to false) it afterwards to resume normal auto-seeding.
+  if (process.env.DELETE_DB === 'true') {
+    await clearData(store)
+    console.log('DELETE_DB: cleared all data.')
+  } else if (process.env.AUTO_SEED === 'true' && (await store.distributors.list()).length === 0) {
+    // On hosts without a persistent disk (e.g. Render's free tier), the database resets on every
+    // restart/spin-down. AUTO_SEED re-populates it on boot so the deployed app is never empty.
     await loadFixtures(store, generateSeed(new Date()))
     console.log('AUTO_SEED: database was empty, loaded the demo network.')
   }

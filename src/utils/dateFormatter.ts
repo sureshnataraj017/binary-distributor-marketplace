@@ -10,8 +10,8 @@ function format(value: ISODateString, pattern: string): string {
   return date ? formatInTimeZone(date, zone, pattern) : '—'
 }
 
-/** e.g. "21 Sep" (business time zone). */
-export const formatShortDate = (value: ISODateString) => format(value, 'dd MMM')
+/** e.g. "21 Sep 2026" (business time zone). */
+export const formatShortDate = (value: ISODateString) => format(value, 'dd MMM yyyy')
 
 /** e.g. "21-09-2026". */
 export const formatDate = (value: ISODateString) => format(value, 'dd-MM-yyyy')

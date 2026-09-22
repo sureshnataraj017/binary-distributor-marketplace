@@ -41,7 +41,12 @@ export function ProgressRing({ percent, size = 72, label }: ProgressRingProps) {
           className="transition-[stroke-dashoffset] duration-500"
         />
       </svg>
-      <span className="absolute text-sm font-semibold">{Math.round(percent)}%</span>
+      <span
+        className="absolute font-semibold leading-none tabular-nums"
+        style={{ fontSize: Math.max(9, Math.round(size * 0.24)) }}
+      >
+        {Math.round(percent)}%
+      </span>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import fastifyStatic from '@fastify/static'
 import Fastify from 'fastify'
 import { HttpError } from './errors'
+import { adminRoutes } from './routes/admin'
 import { commissionRoutes } from './routes/commissions'
 import { distributorRoutes } from './routes/distributors'
 import { retailerRoutes } from './routes/retailers'
@@ -96,6 +97,7 @@ export function buildApp({
   retailerRoutes(app, store)
   saleRoutes(app, store)
   commissionRoutes(app, store)
+  adminRoutes(app, store)
 
   return app
 }
