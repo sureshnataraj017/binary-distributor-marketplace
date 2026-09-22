@@ -13,8 +13,8 @@ function format(value: ISODateString, pattern: string): string {
 /** e.g. "21 Sep" (business time zone). */
 export const formatShortDate = (value: ISODateString) => format(value, 'dd MMM')
 
-/** e.g. "21 Sep 2026". */
-export const formatDate = (value: ISODateString) => format(value, 'dd MMM yyyy')
+/** e.g. "21-09-2026". */
+export const formatDate = (value: ISODateString) => format(value, 'dd-MM-yyyy')
 
 /** e.g. "21 Sep 2026, 14:05". */
 export const formatDateTime = (value: ISODateString) => format(value, 'dd MMM yyyy, HH:mm')

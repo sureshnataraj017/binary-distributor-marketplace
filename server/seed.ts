@@ -198,9 +198,6 @@ export function generateSeed(now: Date, seed = 20260921): SeedData {
 
   addRetailer(dist('DIST-002'), todayStart - MINUTE) // 23:59 IST yesterday
   addRetailer(dist('DIST-003'), todayTime(), 'CANCELLED')
-  addRetailer(dist('DIST-003'), todayTime(), 'ACTIVE', {
-    phone: todayRetailers.get('DIST-003')![0]!.phone,
-  })
   addRetailer(dist('DIST-004'), todayStart + MINUTE) // 00:01 IST today
   addRetailer(dist('DIST-005'), todayTime(), 'DEACTIVATED')
   addRetailer(dist('DIST-006'), nowMs + DAY) // future-dated => invalid

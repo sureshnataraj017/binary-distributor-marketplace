@@ -106,7 +106,7 @@ export function DatePicker({
         } ${selected ? 'text-ink' : 'text-muted'}`}
       >
         <CalendarDays aria-hidden="true" className="size-4 shrink-0" />
-        {selected ? format(selected, 'd MMM yyyy') : placeholder}
+        {selected ? format(selected, 'dd-MM-yyyy') : placeholder}
       </button>
       {open &&
         createPortal(

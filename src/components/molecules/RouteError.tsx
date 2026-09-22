@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Card } from '@/components/ui/Card'
+import { Card } from '@/components/atoms/Card'
 
 interface State {
   error: Error | null

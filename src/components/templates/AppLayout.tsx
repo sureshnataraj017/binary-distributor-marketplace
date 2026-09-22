@@ -9,7 +9,7 @@ import {
   Users,
 } from 'lucide-react'
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom'
-import { StateFilter } from '@/components/common/StateFilter'
+import { StateFilter } from '@/components/molecules/StateFilter'
 import { useThemeStore } from '@/store/themeStore'
 
 const NAV = [

@@ -1,11 +1,11 @@
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Card } from '@/components/ui/Card'
-import { Skeleton } from '@/components/ui/Skeleton'
-import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/atoms/Card'
+import { Skeleton } from '@/components/atoms/Skeleton'
+import { Button } from '@/components/atoms/Button'
 import { useTableState, type SortState, type SortValue } from '@/hooks/useTableState'
-import { EmptyState } from './EmptyState'
-import { ErrorState } from './ErrorState'
+import { EmptyState } from '@/components/molecules/EmptyState'
+import { ErrorState } from '@/components/molecules/ErrorState'
 
 export interface Column<T> {
   key: string
@@ -67,7 +67,7 @@ export function DataTable<T>({
           <caption className="sr-only">{caption}</caption>
           <thead className="bg-hover text-xs uppercase tracking-wide text-ink-2">
             <tr>
-              {columns.map((column) => {
+              {columns.map((column, i) => {
                 const active = table.sort?.key === column.key
                 return (
                   <th
@@ -80,7 +80,7 @@ export function DataTable<T>({
                           : 'descending'
                         : undefined
                     }
-                    className={`px-4 py-2.5 font-medium ${alignClass(column.align)}`}
+                    className={`px-4 py-2.5 font-medium ${alignClass(column.align)} ${i === 0 ? 'sticky left-0 z-10 border-r border-line bg-hover' : ''}`}
                   >
                     {column.sortValue ? (
                       <button
@@ -127,11 +127,11 @@ export function DataTable<T>({
           {showBody && (
             <tbody>
               {table.pageRows.map((row) => (
-                <tr key={rowKey(row)} className="border-t border-line hover:bg-hover">
-                  {columns.map((column) => (
+                <tr key={rowKey(row)} className="group border-t border-line hover:bg-hover">
+                  {columns.map((column, i) => (
                     <td
                       key={column.key}
-                      className={`px-4 py-2.5 tabular-nums ${alignClass(column.align)}`}
+                      className={`px-4 py-2.5 tabular-nums ${alignClass(column.align)} ${i === 0 ? 'sticky left-0 z-10 border-r border-line bg-surface group-hover:bg-hover' : ''}`}
                     >
                       {column.cell(row)}
                     </td>
@@ -147,7 +147,7 @@ export function DataTable<T>({
                 {columns.map((column, i) => (
                   <td
                     key={column.key}
-                    className={`px-4 py-2.5 tabular-nums ${alignClass(column.align)}`}
+                    className={`px-4 py-2.5 tabular-nums ${alignClass(column.align)} ${i === 0 ? 'sticky left-0 z-10 border-r border-line bg-hover' : ''}`}
                   >
                     {column.footer
                       ? column.footer(table.sorted)

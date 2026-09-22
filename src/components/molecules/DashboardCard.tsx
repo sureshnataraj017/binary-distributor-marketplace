@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from 'react'
-import { Card } from '@/components/ui/Card'
-import { Skeleton } from '@/components/ui/Skeleton'
+import { Card } from '@/components/atoms/Card'
+import { Skeleton } from '@/components/atoms/Skeleton'
 
 interface DashboardCardProps {
   label: string

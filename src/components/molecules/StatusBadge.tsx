@@ -1,4 +1,4 @@
-import { Badge, type BadgeTone } from '@/components/ui/Badge'
+import { Badge, type BadgeTone } from '@/components/atoms/Badge'
 import { humanize } from '@/utils/dateFormatter'
 
 const TONE: Record<string, BadgeTone> = {

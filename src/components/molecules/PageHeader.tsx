@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -18,9 +18,21 @@ export function PageHeader({
   crumbs?: Crumb[]
   actions?: ReactNode
 }) {
+  // The nearest ancestor in the trail is the natural "back" target (the final crumb is this page itself).
+  const backTo = [...(crumbs ?? []).slice(0, -1)].reverse().find((c) => c.to)?.to
+
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
+        {backTo && (
+          <Link
+            to={backTo}
+            className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-ink-2 hover:text-ink"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Back
+          </Link>
+        )}
         {crumbs && (
           <nav
             aria-label="Breadcrumb"

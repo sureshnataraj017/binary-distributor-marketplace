@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
+import { Button } from '@/components/atoms/Button'
 
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const message = error instanceof Error ? error.message : 'Something went wrong.'

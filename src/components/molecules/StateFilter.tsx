@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useId, useMemo } from 'react'
 import { ALL_STATES, INDIA_STATES } from '@/config/indiaStates'
 import { distributorService } from '@/services/distributorService'
-import { Select } from '@/components/ui/Select'
+import { Select } from '@/components/atoms/Select'
 import { useFilterStore } from '@/store/filterStore'
 
 /** Global India state filter. Scopes KPIs, lists, ledger and the network tree. */

@@ -11,14 +11,14 @@ import {
 } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { CommissionMix } from '@/components/features/CommissionMix'
-import { SalesChart } from '@/components/features/SalesChart'
-import { DashboardCard } from '@/components/common/DashboardCard'
-import { ErrorState } from '@/components/common/ErrorState'
-import { PageHeader } from '@/components/common/PageHeader'
-import { ProgressRing } from '@/components/common/ProgressRing'
-import { Card } from '@/components/ui/Card'
-import { Skeleton } from '@/components/ui/Skeleton'
+import { CommissionMix } from '@/components/organisms/CommissionMix'
+import { SalesChart } from '@/components/organisms/SalesChart'
+import { DashboardCard } from '@/components/molecules/DashboardCard'
+import { ErrorState } from '@/components/molecules/ErrorState'
+import { PageHeader } from '@/components/molecules/PageHeader'
+import { ProgressRing } from '@/components/atoms/ProgressRing'
+import { Card } from '@/components/atoms/Card'
+import { Skeleton } from '@/components/atoms/Skeleton'
 import { defaultCommissionConfig } from '@/config/commissionConfig'
 import { salesByDay } from '@/domain/metrics'
 import { useMarketplaceData } from '@/hooks/useMarketplaceData'
@@ -94,7 +94,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <DashboardCard
           label="Total distributors"
           value={metrics?.totalDistributors}

@@ -1,8 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
-import { RouteErrorBoundary } from '@/components/common/RouteError'
-import { AppLayout } from '@/components/layout/AppLayout'
-import { Skeleton } from '@/components/ui/Skeleton'
+import { RouteErrorBoundary } from '@/components/molecules/RouteError'
+import { AppLayout } from '@/components/templates/AppLayout'
+import { Skeleton } from '@/components/atoms/Skeleton'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Distributors = lazy(() => import('@/pages/Distributors'))

@@ -1,6 +1,6 @@
 import type { Edge } from '@xyflow/react'
-import type { CompanyFlowNode } from '@/components/features/CompanyNode'
-import type { DistributorFlowNode } from '@/components/features/DistributorNode'
+import type { CompanyFlowNode } from '@/components/organisms/CompanyNode'
+import type { DistributorFlowNode } from '@/components/organisms/DistributorNode'
 import type { DashboardMetrics, DistributorSummary } from '@/domain/metrics'
 import type { Distributor, Retailer } from '@/types'
 import { COMPANY_ID, type LayoutEdge, type LayoutItem } from './treeLayout'
